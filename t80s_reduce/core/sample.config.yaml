@@ -1,0 +1,52 @@
+
+# This file is just an exemple of the structure of the configuration files generated/used by the scripts. You don't
+# need one to start calibrating, unless you want to manually select yours targets and configure the scripts. The script
+# 't80s_sort_night' is designed to inspect T80S database and generate a script like this as a starting point. You can
+# then edit to fix any misclassification, remove or add targets, fix calibration selection etc..
+
+T80S Reduce: Is a set of scripts to provide quicklook reduction tools for the T80S telescope comissioning data.
+
+Author: Your Name
+
+database:
+  host: "192.168.20.118"
+  port: 27017
+
+night: 20160810
+
+targets:
+  comment: All science targets to be reduced will be stored in this section.
+  path: /path/to/the/data
+
+  obj 1:
+    type: 'SCIENCE'
+    filters: ['F1', 'F2', 'F3']
+    raw files: ['img0001.fits','img0002.fits','img0003.fits']
+  obj 2:
+    type: 'SCIENCE'
+    filters: ['F1', 'F2', 'F3']
+    files: ['img0004.fits','img0005.fits','img0006.fits']
+  obj 3:
+    type: 'EXTINCTION'
+    filters: ['F1', 'F2', 'F3']
+    raw files: ['img0007.fits','img0008.fits','img0009.fits']
+  obj 4:
+    type: 'EXTINCTION'
+    filters: ['F1', 'F2', 'F3']
+    raw files: ['img0010.fits','img0011.fits','img0012.fits']
+
+calibrations:
+
+  bias:
+    raw: ['bias0001.fits', 'bias0002.fits', 'bias0003.fits', 'bias0004.fits', 'bias0005.fits']
+    master: 'master-bias.fits'
+  flats:
+    F1:
+      raw: ['flat_F1_0001.fits', 'flat_F1_0002.fits', 'flat_F1_0003.fits']
+      processed: ['tlo_flat_F1_0001.fits', 'tlo_flat_F1_0002.fits', 'tlo_flat_F1_0003.fits']
+      master: 'master-flatF1.fits'
+    F2:
+      raw: ['flat_F2_0001.fits', 'flat_F2_0002.fits', 'flat_F2_0003.fits']
+    F3:
+      raw: ['flat_F3_0001.fits', 'flat_F3_0002.fits', 'flat_F3_0003.fits']
+

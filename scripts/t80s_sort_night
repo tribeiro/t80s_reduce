@@ -1,0 +1,10 @@
+#! /usr/bin/env python
+
+'''
+
+'''
+
+from t80s_reduce.main.t80s_sort_night import main
+
+if __name__ == '__main__':
+    main(sys.argv)
