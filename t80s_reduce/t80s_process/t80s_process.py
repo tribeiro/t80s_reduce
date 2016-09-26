@@ -4,6 +4,7 @@ import logging
 import yaml
 from astropy.io import fits
 import datetime
+from distutils.dir_util import mkpath
 
 from t80s_reduce.core.constants import *
 from t80s_reduce.util.imcombine import imcombine
@@ -386,7 +387,7 @@ class T80SProcess:
 
                 if filter not in self.config['objects'][object]:
                     log.debug('Object %s has no images in filter %s' % (object,
-                                                                         filter))
+                                                                        filter))
                     continue
                 if 'naive' in self.config['objects'][object][filter] and not overwrite:
                     log.warning('%s in %s already naively combined. Run with --overwrite to continue.' % (object,
@@ -398,10 +399,17 @@ class T80SProcess:
                 path = os.path.join(self.config['path'],
                                     self.config['objects'][object]['night'],
                                     object.replace(' ', '_'),
-                                    filter) if 'wpath' not in self.config['path'] else self.config['wpath']
-                
+                                    filter) if 'wpath' not in self.config['path'] else os.path.join(
+                    self.config['wpath'],
+                    self.config['objects'][object]['night'],
+                    object.replace(' ', '_'),
+                    filter)
+
+                if not os.path.exists(path):
+                    log.debug('Working directory %s does not exists, creating.' % path)
+                    mkpath(path)
+
                 img_list = []
                 for raw in self.config['objects'][object][filter][image_type]:
                     img_list.append(os.path.join(path, image_type, raw))
-                imcombine(img_list, os.path.join(path, naive_name),overwrite=overwrite)
-
+                imcombine(img_list, os.path.join(path, naive_name), overwrite=overwrite)
