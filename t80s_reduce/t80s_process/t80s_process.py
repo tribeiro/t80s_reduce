@@ -399,17 +399,22 @@ class T80SProcess:
                 path = os.path.join(self.config['path'],
                                     self.config['objects'][object]['night'],
                                     object.replace(' ', '_'),
+                                    filter)
+                
+                wpath = os.path.join(self.config['path'],
+                                    self.config['objects'][object]['night'],
+                                    object.replace(' ', '_'),
                                     filter) if 'wpath' not in self.config else os.path.join(
                     self.config['wpath'],
                     self.config['objects'][object]['night'],
                     object.replace(' ', '_'),
                     filter)
 
-                if not os.path.exists(path):
+                if not os.path.exists(wpath):
                     log.debug('Working directory %s does not exists, creating.' % path)
-                    mkpath(path)
+                    mkpath(wpath)
 
                 img_list = []
                 for raw in self.config['objects'][object][filter][image_type]:
                     img_list.append(os.path.join(path, image_type, raw))
-                imcombine(img_list, os.path.join(path, naive_name), overwrite=overwrite)
+                imcombine(img_list, os.path.join(wpath, naive_name), overwrite=overwrite)
