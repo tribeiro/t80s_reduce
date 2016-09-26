@@ -63,7 +63,8 @@ def main(argv):
     infos = np.array([(entry['OBJECT'], entry['FILENAME'], entry['FILTER'],) for entry in cursor]).T
     object_list = np.unique(infos[0])
 
-    targets = {'objects': {}}
+    targets = {'night' : night,
+        'objects': {}}
 
     log.debug('Found %i objects.' % len(object_list))
     for obj in object_list:
@@ -117,6 +118,6 @@ def main(argv):
 
     log.info('Saving selection to %s' % args.output)
     with open(args.output, 'w') as fp:
-        yaml.dump(targets, fp)
+        yaml.dump(targets, fp, default_flow_style = False)
 
     return 0

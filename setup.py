@@ -3,7 +3,8 @@ from distutils.core import setup
 setup(
     name='t80s_reduce',
     version='0.0.1',
-    packages=['t80s_reduce', 'fits_reduce.main', 'fits_reduce.util'],
+    packages=['t80s_reduce', 't80s_reduce.core', 't80s_reduce.util','t80s_reduce.t80s_process',
+              't80s_reduce.t80s_check_calibrations', 't80s_reduce.t80s_sort_night'],
     url='https://github.com/tribeiro/t80s_reduce/',
     license='BSD',
     author='Tiago Ribeiro de Souza',
@@ -13,8 +14,6 @@ setup(
                       'colorlog',
                       'ccdproc>=0.3.3',
                       'fit_reduce'],
-    scripts=['scripts/reducer',
-             'scripts/t80s_imarith',
-             'scripts/t80s_imcombine',
-             'scripts/t80s_preproc',]
+    scripts=['scripts/t80s_check_calibrations','scripts/t80s_gen_download','scripts/t80s_process',
+             'scripts/t80s_sort_calibrations', 'scripts/t80s_sort_night']
 )
