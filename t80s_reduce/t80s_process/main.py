@@ -88,7 +88,7 @@ This script will do:
         log.debug('Converting from adu to electrons.')
     elif args.action == 'naive-combine':
         log.debug('Combining images per filter with a naive algorithm, ignoring astrometric variations.')
-        process.imcombine('naive-combine', args.overwrite)
+        process.naive_combine(overwrite=args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 
