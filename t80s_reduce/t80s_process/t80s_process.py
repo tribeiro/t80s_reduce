@@ -399,7 +399,7 @@ class T80SProcess:
                 path = os.path.join(self.config['path'],
                                     self.config['objects'][object]['night'],
                                     object.replace(' ', '_'),
-                                    filter) if 'wpath' not in self.config['path'] else os.path.join(
+                                    filter) if 'wpath' not in self.config else os.path.join(
                     self.config['wpath'],
                     self.config['objects'][object]['night'],
                     object.replace(' ', '_'),
