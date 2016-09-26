@@ -12,6 +12,7 @@ from t80s_reduce.t80s_process.t80s_preprocess import T80SPreProc
 
 log = logging.getLogger(__name__)
 
+
 class T80SProcess:
     def __init__(self, config=None):
 
@@ -98,12 +99,14 @@ class T80SProcess:
 
         return img_list
 
-    def get_target_list(self, get_file_type='raw files', write_file_type=None, overwrite=False):
+    def get_target_list(self, get_file_type='raw files', write_file_type=None, overwrite=False, getfilter=None):
         config = self.config
         img_list = []
 
+        filter_list = getfilter if getfilter is not None else FILTERS
+
         for object in config['objects']:
-            for filter in FILTERS:
+            for filter in filter_list:
                 if filter not in config['objects'][object]:
                     continue
                 if (write_file_type is not None) and (overwrite) and \
@@ -161,7 +164,6 @@ class T80SProcess:
                     raise
                 else:
                     self.config['calibrations']['sky-flat'][filter]['master'] = 'masterflat.fits'
-
 
     def biascorr(self, overwrite=False):
 
@@ -320,7 +322,7 @@ class T80SProcess:
                 hdulist = fits.open(img[0])
                 normfactor = np.mean(hdulist[nhdu].data)
                 log.debug('Normalizing')
-                newdata = np.zeros_like(hdulist[nhdu].data,dtype=np.float32)
+                newdata = np.zeros_like(hdulist[nhdu].data, dtype=np.float32)
                 newdata += hdulist[nhdu].data
                 newdata /= normfactor
                 output_hdu = fits.PrimaryHDU(header=hdulist[nhdu].header,
@@ -337,7 +339,7 @@ class T80SProcess:
                     os.mkdir(os.path.dirname(img[1]))
 
                 log.info('Saving output to %s' % img[1])
-                output_hdulist.writeto(img[1],clobber = overwrite)
+                output_hdulist.writeto(img[1], clobber=overwrite)
 
             except Exception, e:
                 log.exception(e)
@@ -368,3 +370,37 @@ class T80SProcess:
                 continue
             else:
                 self.config['objects'][img[2][1]][img[2][2]]['flatcorr'].append(os.path.basename(img[1]))
+
+    def naive_combine(self, image_type='flatcorr', overwrite=False):
+        '''
+        Combine all images of the objects in a single filter using a naive approach, whitout fixing astrometric
+
+        :param overwrite:
+        :return:
+        '''
+
+        for object in self.config['objects']:
+            for filter in FILTERS:
+                naive_name = 'naive_combine_%s_%s.fits' % (object.replace(' ', '_'),
+                                                           filter)
+
+                if filter not in self.config['objects'][object]:
+                    log.debug('Object %s has no images in filter %s' % (object,
+                                                                         filter))
+                    continue
+                if 'naive' in self.config['objects'][object][filter] and not overwrite:
+                    log.warning('%s in %s already naively combined. Run with --overwrite to continue.' % (object,
+                                                                                                          filter))
+                    continue
+                else:
+                    self.config['objects'][object][filter]['naive'] = naive_name
+
+                path = os.path.join(self.config['path'],
+                                    self.config['objects'][object]['night'],
+                                    object.replace(' ', '_'),
+                                    filter)
+                img_list = []
+                for raw in self.config['objects'][object][filter][image_type]:
+                    img_list.append(os.path.join(path, image_type, raw))
+                imcombine(img_list, os.path.join(path, naive_name),overwrite=overwrite)
+

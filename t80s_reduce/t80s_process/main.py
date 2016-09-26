@@ -36,7 +36,7 @@ This script will do:
     parser.add_argument('--action',
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
-                                 'master-flat', 'flatcorr', 'adu2e'])
+                                 'master-flat', 'flatcorr', 'adu2e', 'naive-combine'])
     parser.add_argument("--overwrite", action="store_true",
                         help='Overwrite existing processed images.')
 
@@ -86,6 +86,9 @@ This script will do:
         process.flatcorr(args.overwrite)
     elif args.action == 'adu2e':
         log.debug('Converting from adu to electrons.')
+    elif args.action == 'naive-combine':
+        log.debug('Combining images per filter with a naive algorithm, ignoring astrometric variations.')
+        process.imcombine('naive-combine', args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 
