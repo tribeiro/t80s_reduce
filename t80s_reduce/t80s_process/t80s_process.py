@@ -398,7 +398,8 @@ class T80SProcess:
                 path = os.path.join(self.config['path'],
                                     self.config['objects'][object]['night'],
                                     object.replace(' ', '_'),
-                                    filter)
+                                    filter) if 'wpath' not in self.config['path'] else self.config['wpath']
+                
                 img_list = []
                 for raw in self.config['objects'][object][filter][image_type]:
                     img_list.append(os.path.join(path, image_type, raw))
