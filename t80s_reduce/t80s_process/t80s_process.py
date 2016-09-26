@@ -379,8 +379,11 @@ class T80SProcess:
         :return:
         '''
 
+        log.debug('Running naive combinations')
         for object in self.config['objects']:
+            log.debug('Working on %s' % object)
             for filter in FILTERS:
+                log.debug('Working on filter %s ' % filter)
                 naive_name = 'naive_combine_%s_%s.fits' % (object.replace(' ', '_'),
                                                            filter)
 
