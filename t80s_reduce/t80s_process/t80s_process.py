@@ -498,6 +498,8 @@ class T80SProcess:
                 sort_mag = np.argsort(mag_arr)[:400]
 
                 axy_table = img[1].replace('.fits', '_axy.fits')
+                if os.path.exists(axy_table):
+                    os.remove(axy_table)
                 out_table[sort_mag].write(axy_table, format='fits')
 
                 AstrometryNet.solveField(img[0],
