@@ -129,7 +129,7 @@ class T80SProcess:
                     config['objects'][object][filter][write_file_type] = []
                 elif (write_file_type is not None) and (write_file_type in config['objects'][object][filter]):
                     log.warning('%s frames in %s already processed but running in non-overwrite mode. '
-                                'Checking files to process.')
+                                'Checking files to process.' % (object, filter))
                     for raw in config['objects'][object][filter][get_file_type]:
                         get = os.path.join(rpath, get_file_type.replace(' ', '_'), raw)
                         write = os.path.join(wpath, write_file_type.replace(' ', '_'), raw)
