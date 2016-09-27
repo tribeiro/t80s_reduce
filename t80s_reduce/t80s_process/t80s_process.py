@@ -2,13 +2,16 @@ import os
 import numpy as np
 import logging
 import yaml
-from astropy.io import fits
+from astropy.io import fits, ascii
 import datetime
 from distutils.dir_util import mkpath
+from shutil import copyfile
 
 from t80s_reduce.core.constants import *
 from t80s_reduce.util.imcombine import imcombine
 from t80s_reduce.util.imarith import imarith
+from t80s_reduce.util.sextractor import SExtractor, SExtractorException
+from t80s_reduce.util.astrometrynet import AstrometryNet, AstrometryNetException
 from t80s_reduce.t80s_process.t80s_preprocess import T80SPreProc
 
 log = logging.getLogger(__name__)
@@ -110,24 +113,41 @@ class T80SProcess:
             for filter in filter_list:
                 if filter not in config['objects'][object]:
                     continue
+
+                rpath = os.path.join(config['path'],
+                                    config['objects'][object]['night'],
+                                    object.replace(' ', '_'),
+                                    filter)
+                wpath = rpath if 'wpath' not in self.config else os.path.join(config['wpath'],
+                                                                              config['objects'][object]['night'],
+                                                                              object.replace(' ', '_'),
+                                                                              filter)
+
                 if (write_file_type is not None) and (overwrite) and \
                         (write_file_type in config['objects'][object][filter]):
                     log.warning('Running in overwrite mode. Cleaning existing %s list.' % write_file_type)
                     config['objects'][object][filter][write_file_type] = []
                 elif (write_file_type is not None) and (write_file_type in config['objects'][object][filter]):
                     log.warning('%s frames in %s already processed but running in non-overwrite mode. '
-                                'Skipping.' % (object, filter))
+                                'Checking files to process.')
+                    for raw in config['objects'][object][filter][get_file_type]:
+                        get = os.path.join(rpath, get_file_type.replace(' ', '_'), raw)
+                        write = os.path.join(wpath, write_file_type.replace(' ', '_'), raw)
+                        if not os.path.exists(write):
+                            log.debug('Image %s not processed. Adding to processing list.' % raw)
+                            img_list.append((get,
+                                             write,
+                                             ('target', object, filter)))
+                        else:
+                            log.debug('Image %s processed, skipping.' % raw)
+                                # 'Skipping.' % (object, filter))
                     continue
                 else:
                     config['objects'][object][filter][write_file_type] = []
 
-                path = os.path.join(config['path'],
-                                    config['objects'][object]['night'],
-                                    object.replace(' ', '_'),
-                                    filter)
                 for raw in config['objects'][object][filter][get_file_type]:
-                    img_list.append((os.path.join(path, get_file_type.replace(' ', '_'), raw),
-                                     os.path.join(path, write_file_type.replace(' ', '_'), raw),
+                    img_list.append((os.path.join(rpath, get_file_type.replace(' ', '_'), raw),
+                                     os.path.join(wpath, write_file_type.replace(' ', '_'), raw),
                                      ('target', object, filter)))
         return img_list
 
@@ -400,11 +420,11 @@ class T80SProcess:
                                     self.config['objects'][object]['night'],
                                     object.replace(' ', '_'),
                                     filter)
-                
+
                 wpath = os.path.join(self.config['path'],
-                                    self.config['objects'][object]['night'],
-                                    object.replace(' ', '_'),
-                                    filter) if 'wpath' not in self.config else os.path.join(
+                                     self.config['objects'][object]['night'],
+                                     object.replace(' ', '_'),
+                                     filter) if 'wpath' not in self.config else os.path.join(
                     self.config['wpath'],
                     self.config['objects'][object]['night'],
                     object.replace(' ', '_'),
@@ -418,3 +438,90 @@ class T80SProcess:
                 for raw in self.config['objects'][object][filter][image_type]:
                     img_list.append(os.path.join(path, image_type, raw))
                 imcombine(img_list, os.path.join(wpath, naive_name), overwrite=overwrite)
+
+    def astrometry(self, overwrite=False):
+        '''
+        Perform astrometric calibration using local installation of astrometry.net, optimized for T80S.
+
+        :return:
+        '''
+
+        img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry', overwrite=overwrite)
+
+        # Todo: Paralellize this!
+        for i, img in enumerate(img_list):
+            try:
+                if not os.path.exists(os.path.dirname(img[1])):
+                    log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                    mkpath(os.path.dirname(img[1]))
+
+                # Run sextractor on image
+                sex = SExtractor()
+
+                if 'sex-setup' in self.config:
+                    sex.setup(self.config['sex-setup'])
+                # default params
+                sex.config['CONFIG_FILE'] = self.config['sex-config']
+
+                # ok, here we go!
+                log.info('Running sextractor')
+                # copyfile(rpath[0],wpath[0])
+                log.debug('Processing %s...' % img[0])
+                sex.run(img[0], updateconfig=False, clean=False)
+
+                sex_table = ascii.read(self.config['sex-catalog-name'])
+
+                bad_mask = np.zeros(len(sex_table), dtype=np.bool) == 0
+                if 'bad-pixel-mask' in self.config:
+                    bad_pixel_mask = np.loadtxt(self.config['bad-pixel-mask'])
+
+                    for ibad in range(len(bad_pixel_mask)):
+                        if bad_pixel_mask[ibad][0] == -1:
+                            # Todo: bad line
+                            pass
+                        elif bad_pixel_mask[ibad][1] == -1:
+                            # bad column
+                            log.debug('%f -> %f' % (bad_pixel_mask[ibad][0] - 1, bad_pixel_mask[ibad][0] + 1))
+                            bad_mask = np.bitwise_and(bad_mask,
+                                                      np.bitwise_or(
+                                                          sex_table['X_IMAGE'].data < np.float(
+                                                              bad_pixel_mask[ibad][0] - 1.5),
+                                                          sex_table['X_IMAGE'].data > np.float(
+                                                              bad_pixel_mask[ibad][0] + 1.5)))
+                            log.debug('size %i' % len(bad_mask[bad_mask]))
+
+                out_table = sex_table[bad_mask]
+
+                mean_mag = np.mean(out_table['MAG_AUTO'])
+                std_mag = np.std(out_table['MAG_AUTO'])
+                mag_arr = np.abs(out_table['MAG_AUTO'].data - mean_mag + std_mag)
+                sort_mag = np.argsort(mag_arr)[:400]
+
+                axy_table = img[1].replace('.fits', '_axy.fits')
+                out_table[sort_mag].write(axy_table, format='fits')
+
+                AstrometryNet.solveField(img[0],
+                                         axy_table)
+
+                # write astrometric solution to a new fits file
+                hdu = fits.open(img[0])
+                wcs = fits.getheader(img[1].replace('.fits', '_axy-out.wcs'))
+
+                for key in wcs:
+                    if key != 'COMMENT' and key != 'HISTORY':
+                        hdu[0].header[key] = wcs[key]
+
+
+                log.debug('Writing file %s...' % img[1])
+                hdu.writeto(img[1])
+                hdu.close()
+
+            except SExtractorException, e:
+                log.exception(e)
+                return -1
+            except Exception, e:
+                log.exception(e)
+                continue
+            else:
+                self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
+
