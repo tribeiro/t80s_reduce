@@ -54,7 +54,7 @@ class AstrometryNet:
         # FIXME: fixed some parameters!
         line = "solve-field %s --no-plots --overwrite -o %s --x-column X_IMAGE --y-column Y_IMAGE " \
                "--sort-column MAG_AUTO --sort-ascending --width %d --height %d --ra %f --dec %f --radius 0.5 " \
-               "-L 0.4 -H 0.6 -u app --over -t 6 --crpix-center" % (
+               "-L 0.5 -H 0.6 -u app --over -t 6 --crpix-center" % (
                    sexoutfilename, outfilename, width, height, ra, dec)
 
 

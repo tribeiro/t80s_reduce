@@ -6,11 +6,15 @@ from astropy.io import fits, ascii
 import datetime
 from distutils.dir_util import mkpath
 from shutil import copyfile
+# import imreg_dft as ird
+import image_registration
 
 from t80s_reduce.core.constants import *
 from t80s_reduce.util.imcombine import imcombine
 from t80s_reduce.util.imarith import imarith
 from t80s_reduce.util.sextractor import SExtractor, SExtractorException
+from t80s_reduce.util.scamp import Scamp
+from t80s_reduce.util.swarp import Swarp
 from t80s_reduce.util.astrometrynet import AstrometryNet, AstrometryNetException
 from t80s_reduce.t80s_process.t80s_preprocess import T80SPreProc
 
@@ -103,21 +107,27 @@ class T80SProcess:
 
         return img_list
 
-    def get_target_list(self, get_file_type='raw files', write_file_type=None, overwrite=False, getfilter=None):
+    def get_target_list(self, get_file_type='raw files', write_file_type=None, overwrite=False, getobject=None,
+                        getfilter=None):
         config = self.config
         img_list = []
 
         filter_list = getfilter if getfilter is not None else FILTERS
+        object_list = getobject if getobject is not None else config['objects']
 
-        for object in config['objects']:
+        for object in object_list:
+            if object not in config['objects']:
+                log.warning('Object %s not in configuration file! Skipping...' % object)
+                continue
+
             for filter in filter_list:
                 if filter not in config['objects'][object]:
                     continue
 
                 rpath = os.path.join(config['path'],
-                                    config['objects'][object]['night'],
-                                    object.replace(' ', '_'),
-                                    filter)
+                                     config['objects'][object]['night'],
+                                     object.replace(' ', '_'),
+                                     filter)
                 wpath = rpath if 'wpath' not in self.config else os.path.join(config['wpath'],
                                                                               config['objects'][object]['night'],
                                                                               object.replace(' ', '_'),
@@ -140,7 +150,7 @@ class T80SProcess:
                                              ('target', object, filter)))
                         else:
                             log.debug('Image %s processed, skipping.' % raw)
-                                # 'Skipping.' % (object, filter))
+                            # 'Skipping.' % (object, filter))
                     continue
                 else:
                     config['objects'][object][filter][write_file_type] = []
@@ -439,6 +449,143 @@ class T80SProcess:
                     img_list.append(os.path.join(path, image_type, raw))
                 imcombine(img_list, os.path.join(wpath, naive_name), overwrite=overwrite)
 
+    def astrometry_scamp(self, overwrite=False):
+        '''
+        Perform astrometric calibration using local installation of astrometry.net, optimized for T80S.
+
+        :return:
+        '''
+
+        for obj in self.config['objects']:
+            img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                            overwrite=overwrite,
+                                            getobject=[obj])
+
+            ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                           overwrite=overwrite,
+                                           getobject=[obj],
+                                           getfilter='R')[0]
+            log.debug('Solving reference image: %s' % ref_img[0])
+
+            # Run sextractor on image
+            sex = SExtractor()
+
+            if 'sex-setup' in self.config:
+                sex.setup(self.config['sex-setup'])
+            # default params
+            sex.config['CONFIG_FILE'] = self.config['sex-config']
+
+            # ok, here we go!
+            log.info('Running sextractor')
+            # copyfile(rpath[0],wpath[0])
+            log.debug('Processing %s...' % ref_img[0])
+            sex.run(ref_img[0], updateconfig=False, clean=False)
+
+            header = Scamp.solveField(self.config['sex-catalog-name'])
+
+            # get astrometric solution
+            wcs = fits.Header.fromtextfile(header)
+            log.debug('Aligning images with reference')
+            img1 = fits.getdata(ref_img[0])
+            ix, iy = img1.shape
+            img1 = img1[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+
+            # Todo: Paralellize this!
+            for i, img in enumerate(img_list):
+                try:
+                    if not os.path.exists(os.path.dirname(img[1])):
+                        log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                        mkpath(os.path.dirname(img[1]))
+                    img2 = fits.getdata(img[0])[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+                    result = image_registration.chi2_shift(img1, img2)
+                    # tvec = result["tvec"].round(4)
+
+                    img2 = fits.open(img[0])
+                    wcs = fits.Header.fromtextfile(header)
+                    log.debug('Offset: %.3f x %.3f' % (result[0], result[1]))
+                    wcs['CRPIX1'] += result[0]
+                    wcs['CRPIX2'] += result[1]
+                    for key in wcs:
+                        if key == 'HISTORY' or key == 'COMMENT':
+                            continue
+                        img2[0].header[key] = wcs[key]
+                    log.debug('Writing %s' % img[1])
+                    img2.writeto(img[1], clobber=overwrite)
+                    # offset[0][i] = reg[0]
+                    # offset[1][i] = reg[1]
+
+
+                except SExtractorException, e:
+                    log.exception(e)
+                    return -1
+                except Exception, e:
+                    log.exception(e)
+                    continue
+                else:
+                    self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
+
+    def register(self):
+        '''
+        Calculate offset between frames on the multiple filters using the first image in R as reference. Store the
+        information on the configuration file.
+
+        :return:
+        '''
+
+        for obj in self.config['objects']:
+            img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='register',
+                                            overwrite=True,
+                                            getobject=[obj])
+
+            ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='register',
+                                           overwrite=False,
+                                           getobject=[obj],
+                                           getfilter='R')[0]
+
+            img1 = fits.getdata(ref_img[0])
+            log.debug('Aligning images with reference')
+            ix, iy = img1.shape
+            img1 = img1[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+
+            # Todo: Paralellize this!
+            for i, img in enumerate(img_list):
+                log.debug('Computing offset for %s' % img[0])
+                try:
+                    # Todo: Try to guess a good grid size from the number of stars.
+                    img2 = fits.getdata(img[0])[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+                    result = image_registration.chi2_shift(img1, img2)
+                    # tvec = result["tvec"].round(4)
+
+                    img2 = fits.open(img[0])
+                    # wcs = fits.Header.fromtextfile(header)
+                    log.debug('Offset: %.3f x %.3f' % (result[0], result[1]))
+                    # wcs['CRPIX1'] += result[0]
+                    # wcs['CRPIX2'] += result[1]
+                    self.config['objects'][img[2][1]][img[2][2]]['register'].append(
+                        (float(result[0]), float(result[1])))
+                    # for key in wcs:
+                    #     if key == 'HISTORY' or key == 'COMMENT':
+                    #         continue
+                    #     img2[0].header[key] = wcs[key]
+                    # img2[0].header['CRPIX1'] += result[0]
+                    # img2[0].header['CRPIX2'] += result[1]
+                    #
+                    # log.debug('Writing %s' % img[1])
+                    # img2.writeto(img[1], clobber=overwrite)
+                    # offset[0][i] = reg[0]
+                    # offset[1][i] = reg[1]
+
+
+                # except SExtractorException, e:
+                #     log.exception(e)
+                #     return -1
+                except Exception, e:
+                    log.exception(e)
+                    continue
+                    # break
+                    # else:
+                    #     self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
+
     def astrometry(self, overwrite=False):
         '''
         Perform astrometric calibration using local installation of astrometry.net, optimized for T80S.
@@ -446,84 +593,270 @@ class T80SProcess:
         :return:
         '''
 
-        img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry', overwrite=overwrite)
+        for obj in self.config['objects']:
+            img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                            overwrite=overwrite,
+                                            getobject=[obj])
 
-        # Todo: Paralellize this!
-        for i, img in enumerate(img_list):
-            try:
-                if not os.path.exists(os.path.dirname(img[1])):
-                    log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
-                    mkpath(os.path.dirname(img[1]))
+            ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                           overwrite=overwrite,
+                                           getobject=[obj],
+                                           getfilter='R')[0]
+            log.debug('Solving reference image: %s' % ref_img[0])
 
-                # Run sextractor on image
-                sex = SExtractor()
+            sex = SExtractor()
 
-                if 'sex-setup' in self.config:
-                    sex.setup(self.config['sex-setup'])
-                # default params
-                sex.config['CONFIG_FILE'] = self.config['sex-config']
+            if 'sex-setup' in self.config:
+                sex.setup(self.config['sex-setup'])
+            # default params
+            sex.config['CONFIG_FILE'] = self.config['sex-config']
 
-                # ok, here we go!
-                log.info('Running sextractor')
-                # copyfile(rpath[0],wpath[0])
-                log.debug('Processing %s...' % img[0])
-                sex.run(img[0], updateconfig=False, clean=False)
+            # ok, here we go!
+            log.info('Running sextractor')
+            # copyfile(rpath[0],wpath[0])
+            log.debug('Processing %s...' % ref_img[0])
+            sex.run(ref_img[0], updateconfig=False, clean=False)
 
-                sex_table = ascii.read(self.config['sex-catalog-name'])
+            sex_table = ascii.read(self.config['sex-catalog-name'])
 
-                bad_mask = np.zeros(len(sex_table), dtype=np.bool) == 0
-                if 'bad-pixel-mask' in self.config:
-                    bad_pixel_mask = np.loadtxt(self.config['bad-pixel-mask'])
+            bad_mask = np.zeros(len(sex_table), dtype=np.bool) == 0
+            if 'bad-pixel-mask' in self.config:
+                bad_pixel_mask = np.loadtxt(self.config['bad-pixel-mask'])
 
-                    for ibad in range(len(bad_pixel_mask)):
-                        if bad_pixel_mask[ibad][0] == -1:
-                            # Todo: bad line
-                            pass
-                        elif bad_pixel_mask[ibad][1] == -1:
-                            # bad column
-                            log.debug('%f -> %f' % (bad_pixel_mask[ibad][0] - 1, bad_pixel_mask[ibad][0] + 1))
-                            bad_mask = np.bitwise_and(bad_mask,
-                                                      np.bitwise_or(
-                                                          sex_table['X_IMAGE'].data < np.float(
-                                                              bad_pixel_mask[ibad][0] - 1.5),
-                                                          sex_table['X_IMAGE'].data > np.float(
-                                                              bad_pixel_mask[ibad][0] + 1.5)))
-                            log.debug('size %i' % len(bad_mask[bad_mask]))
+                for ibad in range(len(bad_pixel_mask)):
+                    if bad_pixel_mask[ibad][0] == -1:
+                        # Todo: bad line
+                        log.debug('%f -> %f' % (bad_pixel_mask[ibad][1] - 1, bad_pixel_mask[ibad][1] + 1))
+                        bad_mask = np.bitwise_and(bad_mask,
+                                                  np.bitwise_or(
+                                                      sex_table['Y_IMAGE'].data < np.float(
+                                                          bad_pixel_mask[ibad][1] - 1.5),
+                                                      sex_table['Y_IMAGE'].data > np.float(
+                                                          bad_pixel_mask[ibad][1] + 1.5)))
+                        log.debug('size %i' % len(bad_mask[bad_mask]))
+                    elif bad_pixel_mask[ibad][1] == -1:
+                        # bad column
+                        log.debug('%f -> %f' % (bad_pixel_mask[ibad][0] - 1, bad_pixel_mask[ibad][0] + 1))
+                        bad_mask = np.bitwise_and(bad_mask,
+                                                  np.bitwise_or(
+                                                      sex_table['X_IMAGE'].data < np.float(
+                                                          bad_pixel_mask[ibad][0] - 1.5),
+                                                      sex_table['X_IMAGE'].data > np.float(
+                                                          bad_pixel_mask[ibad][0] + 1.5)))
+                        log.debug('size %i' % len(bad_mask[bad_mask]))
 
-                out_table = sex_table[bad_mask]
+            out_table = sex_table[bad_mask]
 
-                mean_mag = np.mean(out_table['MAG_AUTO'])
-                std_mag = np.std(out_table['MAG_AUTO'])
-                mag_arr = np.abs(out_table['MAG_AUTO'].data - mean_mag + std_mag)
-                sort_mag = np.argsort(mag_arr)[:400]
+            # mean_mag = np.mean(out_table['MAG_AUTO'])
+            # mask = out_table['MAG_AUTO'] < mean_mag
+            # mean_mag_upper = out_table['MAG_AUTO'][mask]
+            # mask = np.bitwise_and(mask,
+            #                       out_table['MAG_AUTO'] > mean_mag_upper)
+            # std_mag = np.std(out_table['MAG_AUTO'])
+            # mag_arr = np.abs(out_table['MAG_AUTO'].data - mean_mag + 3*std_mag)
+            sort_mag = np.argsort(out_table['MAG_AUTO'].data)[:400]
 
-                axy_table = img[1].replace('.fits', '_axy.fits')
-                if os.path.exists(axy_table):
-                    os.remove(axy_table)
-                out_table[sort_mag].write(axy_table, format='fits')
+            axy_table = ref_img[1].replace('.fits', '_axy.fits')
+            if os.path.exists(axy_table) and overwrite:
+                os.remove(axy_table)
+            out_table[sort_mag].write(axy_table, format='fits')
 
-                AstrometryNet.solveField(img[0],
-                                         axy_table)
+            AstrometryNet.solveField(ref_img[0],
+                                     axy_table)
 
-                # write astrometric solution to a new fits file
-                hdu = fits.open(img[0])
-                wcs = fits.getheader(img[1].replace('.fits', '_axy-out.wcs'))
+            # write astrometric solution to a new fits file
+            hdu = fits.open(ref_img[0])
+            wcs = fits.getheader(ref_img[1].replace('.fits', '_axy-out.wcs'))
 
-                for key in wcs:
-                    if key != 'COMMENT' and key != 'HISTORY':
-                        hdu[0].header[key] = wcs[key]
+            for key in wcs:
+                if key != 'COMMENT' and key != 'HISTORY':
+                    hdu[0].header[key] = wcs[key]
 
+            log.debug('Writing file %s...' % ref_img[1])
+            hdu.writeto(ref_img[1], clobber=overwrite)
 
-                log.debug('Writing file %s...' % img[1])
-                hdu.writeto(img[1])
-                hdu.close()
+            # continue
 
-            except SExtractorException, e:
-                log.exception(e)
-                return -1
-            except Exception, e:
-                log.exception(e)
+    def astrometry_align(self, overwrite=True):
+
+        log.debug('Aligning images with reference')
+
+        for obj in self.config['objects']:
+            img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                            overwrite=overwrite,
+                                            getobject=[obj])
+
+            ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                           overwrite=overwrite,
+                                           getobject=[obj],
+                                           getfilter='R')[0]
+
+            ref_wcs_name = ref_img[1].replace('.fits', '_axy-out.wcs')
+            # Check that reference image wcs information exists
+            if not os.path.exists(ref_wcs_name):
+                log.error('Reference image wcs %s does not exists. Run astrometry before aligning!' % obj)
                 continue
-            else:
-                self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
 
+            wcs = fits.getheader(ref_wcs_name)
+            # Todo: Paralellize this!
+            nimg = 0
+            for i, img in enumerate(img_list):
+                try:
+                    # Check that offset was calculated
+                    reg_len = len(self.config['objects'][img[2][1]][img[2][2]]['register'])
+                    flatcorr_len = len(self.config['objects'][img[2][1]][img[2][2]]['flatcorr'])
+
+                    if ('register' not in self.config['objects'][img[2][1]][img[2][2]]) or (reg_len != flatcorr_len):
+                        log.error('Offsets for %s not properly set! Run register again.' % obj)
+                        continue
+
+                    if nimg >= flatcorr_len:
+                        nimg = 0
+                    # wcs = fits.Header.fromtextfile(header)
+                    # log.debug('Offset: %.3f x %.3f' % (result[0],result[1]))
+                    # wcs['CRPIX1'] += result[0]
+                    # wcs['CRPIX2'] += result[1]
+                    img2 = fits.open(img[0])
+                    for key in wcs:
+                        if key == 'HISTORY' or key == 'COMMENT':
+                            continue
+                        img2[0].header[key] = wcs[key]
+                    img2[0].header['CRPIX1'] += self.config['objects'][img[2][1]][img[2][2]]['register'][nimg][0]
+                    img2[0].header['CRPIX2'] += self.config['objects'][img[2][1]][img[2][2]]['register'][nimg][1]
+                    nimg += 1
+
+                    log.debug('Writing %s' % img[1])
+                    img2.writeto(img[1], clobber=overwrite)
+                    # offset[0][i] = reg[0]
+                    # offset[1][i] = reg[1]
+
+
+                except SExtractorException, e:
+                    log.exception(e)
+                    return -1
+                except Exception, e:
+                    log.exception(e)
+                    continue
+                else:
+                    self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
+
+                    # img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry', overwrite=overwrite)
+                    #
+                    # # Todo: Paralellize this!
+                    # for i, img in enumerate(img_list):
+                    #     try:
+                    #         if not os.path.exists(os.path.dirname(img[1])):
+                    #             log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                    #             mkpath(os.path.dirname(img[1]))
+                    #
+                    #         # Run sextractor on image
+                    #         sex = SExtractor()
+                    #
+                    #         if 'sex-setup' in self.config:
+                    #             sex.setup(self.config['sex-setup'])
+                    #         # default params
+                    #         sex.config['CONFIG_FILE'] = self.config['sex-config']
+                    #
+                    #         # ok, here we go!
+                    #         log.info('Running sextractor')
+                    #         # copyfile(rpath[0],wpath[0])
+                    #         log.debug('Processing %s...' % img[0])
+                    #         sex.run(img[0], updateconfig=False, clean=False)
+                    #
+                    #         sex_table = ascii.read(self.config['sex-catalog-name'])
+                    #
+                    #         bad_mask = np.zeros(len(sex_table), dtype=np.bool) == 0
+                    #         if 'bad-pixel-mask' in self.config:
+                    #             bad_pixel_mask = np.loadtxt(self.config['bad-pixel-mask'])
+                    #
+                    #             for ibad in range(len(bad_pixel_mask)):
+                    #                 if bad_pixel_mask[ibad][0] == -1:
+                    #                     # Todo: bad line
+                    #                     pass
+                    #                 elif bad_pixel_mask[ibad][1] == -1:
+                    #                     # bad column
+                    #                     log.debug('%f -> %f' % (bad_pixel_mask[ibad][0] - 1, bad_pixel_mask[ibad][0] + 1))
+                    #                     bad_mask = np.bitwise_and(bad_mask,
+                    #                                               np.bitwise_or(
+                    #                                                   sex_table['X_IMAGE'].data < np.float(
+                    #                                                       bad_pixel_mask[ibad][0] - 1.5),
+                    #                                                   sex_table['X_IMAGE'].data > np.float(
+                    #                                                       bad_pixel_mask[ibad][0] + 1.5)))
+                    #                     log.debug('size %i' % len(bad_mask[bad_mask]))
+                    #
+                    #         out_table = sex_table[bad_mask]
+                    #
+                    #         mean_mag = np.mean(out_table['MAG_AUTO'])
+                    #         std_mag = np.std(out_table['MAG_AUTO'])
+                    #         mag_arr = np.abs(out_table['MAG_AUTO'].data - mean_mag + std_mag)
+                    #         sort_mag = np.argsort(mag_arr)[:400]
+                    #
+                    #         axy_table = img[1].replace('.fits', '_axy.fits')
+                    #         out_table[sort_mag].write(axy_table, format='fits')
+                    #
+                    #         AstrometryNet.solveField(img[0],
+                    #                                  axy_table)
+                    #
+                    #         # write astrometric solution to a new fits file
+                    #         hdu = fits.open(img[0])
+                    #         wcs = fits.getheader(img[1].replace('.fits', '_axy-out.wcs'))
+                    #
+                    #         for key in wcs:
+                    #             if key != 'COMMENT' and key != 'HISTORY':
+                    #                 hdu[0].header[key] = wcs[key]
+                    #
+                    #
+                    #         log.debug('Writing file %s...' % img[1])
+                    #         hdu.writeto(img[1])
+                    #         hdu.close()
+                    #
+                    #     except SExtractorException, e:
+                    #         log.exception(e)
+                    #         return -1
+                    #     except Exception, e:
+                    #         log.exception(e)
+                    #         continue
+                    #     else:
+                    #         self.config['objects'][img[2][1]][img[2][2]]['astrometry'].append(os.path.basename(img[1]))
+                    #
+
+    def coadd(self, overwrite=False):
+
+        for obj in self.config['objects']:
+            for fltr in FILTERS:
+                img_list = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
+                                                overwrite=overwrite,
+                                                getobject=[obj],
+                                                getfilter=[fltr])
+                ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
+                                                           overwrite=overwrite,
+                                                           getobject=[obj],
+                                                           getfilter='R')[0]
+                ref_hdr = fits.getheader(ref_img[0])
+                if len(img_list) == 0:
+                    log.warning('No images to combine for %s in %s' % (obj,fltr))
+                    continue
+                try:
+                    log.debug('Coadding %i images...' % len(img_list))
+                    coadd_swarp = Swarp()
+                    coadd_img = '%s_%s' % (obj.replace(" ","-"), fltr)
+                    wpath = os.path.join(self.config['path'],
+                                         self.config['objects'][obj]['night'],
+                                         obj.replace(' ', '_'),
+                                         fltr) if 'wpath' not in self.config else os.path.join(self.config['wpath'],
+                                                                                               self.config['objects'][
+                                                                                                   obj]['night'],
+                                                                                               obj.replace(' ', '_'),
+                                                                                               fltr)
+                    coadd_swarp.coadd([img[0] for img in img_list],
+                                      path=wpath,
+                                      root=coadd_img,
+                                      ra=ref_hdr["RA"],
+                                      dec=ref_hdr["DEC"],
+                                      size=10000)
+                    log.debug('Saved coadded image to %s' % (os.path.join(wpath,coadd_img)))
+                except Exception, e:
+                    log.exception(e)
+                    continue
+                else:
+                    self.config['objects'][obj][fltr]['coadd'] = coadd_img

@@ -36,7 +36,8 @@ This script will do:
     parser.add_argument('--action',
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
-                                 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'astrometry'])
+                                 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register', 'astrometry',
+                                 'astrometry-align', 'coadd'])
     parser.add_argument("--overwrite", action="store_true",
                         help='Overwrite existing processed images.')
 
@@ -89,9 +90,18 @@ This script will do:
     elif args.action == 'naive-combine':
         log.debug('Combining images per filter with a naive algorithm, ignoring astrometric variations.')
         process.naive_combine(overwrite=args.overwrite)
+    elif args.action == 'register':
+        log.debug('Alining images.')
+        process.register()
     elif args.action == 'astrometry':
         log.debug('Astrometric calibration.')
         process.astrometry(overwrite=args.overwrite)
+    elif args.action == 'astrometry-align':
+        log.debug('Astrometric calibration.')
+        process.astrometry_align(overwrite=args.overwrite)
+    elif args.action == 'coadd':
+        log.debug('Coadding images.')
+        process.coadd(overwrite=args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 
