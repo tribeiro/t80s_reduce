@@ -121,3 +121,8 @@ def main(argv):
         yaml.dump(targets, fp, default_flow_style = False)
 
     return 0
+
+if(__name__ == "__main__"):
+    args = sys.argv
+    print(args)
+    main(args)

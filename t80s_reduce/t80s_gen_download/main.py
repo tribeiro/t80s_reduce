@@ -129,3 +129,7 @@ def main(argv):
         fp.write(download_string)
 
     return 0
+
+
+if(__name__ == "__main__"):
+    main(sys.argv)

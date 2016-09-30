@@ -1,0 +1,17 @@
+astropy==1.2.1
+astroscrappy==1.0.5
+ccdproc==1.1.0
+colorlog==2.7.0
+get==0.0.0
+numpy==1.11.1
+post==0.0.0
+public==0.0.0
+pymongo==3.3.0
+PyYAML==3.12
+query-string==0.0.0
+reproject==0.3.1
+request==0.0.0
+requests==2.11.1
+scipy==0.18.1
+setupfiles==0.0.13
+
