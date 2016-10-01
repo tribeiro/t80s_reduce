@@ -1,5 +1,11 @@
-from subprocess import Popen
+import __builtin__
+
+
+
+
 import os
+import copy
+from subprocess import Popen
 import logging
 import time
 from shutil import copyfile
@@ -9,106 +15,111 @@ log = logging.getLogger(__name__)
 
 class Swarp:
 
-    _SW_config = '''# Default configuration file for SWarp 2.38.0
-# EB 2016-09-27
-#
-#----------------------------------- Output -----------------------------------
-IMAGEOUT_NAME          coadd.fits      # Output filename
-WEIGHTOUT_NAME       coadd.weight.fits # Output weight-map filename
+    _SW_config = {'IMAGEOUT_NAME': {'value': 'coadd.fits', 'comment': 'Output filename'},
+                  'WEIGHTOUT_NAME': {'value': 'coadd.weight.fits', 'comment': 'Output weight-map filename'},
+                  'HEADER_ONLY': {'value': 'N', 'comment': 'Only a header as an output file (Y/N)?'},
+                  'HEADER_SUFFIX': {'value': '.head', 'comment': 'Filename extension for additional headers'},
+                  'WEIGHT_TYPE': {'value': 'NONE', 'comment': 'BACKGROUND,MAP_RMS,MAP_VARIANCE or MAP_WEIGHT'},
+                  'WEIGHT_SUFFIX': {'value': '.weight.fits', 'comment': 'Suffix to use for weight-maps'},
+                  'WEIGHT_IMAGE': {'value': '#',
+                                   'comment': 'Weightmap filename if suffix not used (all or for each weight-map)'},
+                  'COMBINE': {'value': 'Y', 'comment': 'Combine resampled images (Y/N)?'},
+                  'COMBINE_TYPE': {'value': 'MEDIAN',
+                                   'comment': 'MEDIAN,AVERAGE,MIN,MAX,WEIGHTED,CLIPPED,CHI-OLD,CHI-MODE,CHI-MEAN,SUM,'
+                                              'WEIGHTED_WEIGHT,MEDIAN_WEIGHT,AND,NAND,OR or NOR'},
+                  'CELESTIAL_TYPE': {'value': 'NATIVE',
+                                     'comment': 'NATIVE, PIXEL, EQUATORIAL,GALACTIC,ECLIPTIC, or SUPERGALACTIC'},
+                  'PROJECTION_TYPE': {'value': 'TAN', 'comment': 'Any WCS projection code or NONE'},
+                  'PROJECTION_ERR': {'value': '0.001',
+                                     'comment': 'Maximum projection error (in output pixels), or 0 for no '
+                                                'approximation'},
+                  'CENTER_TYPE': {'value': 'ALL', 'comment': 'MANUAL, ALL or MOST'},
+                  'CENTER': {'value': '00:00:00.0, +00:00:00.0', 'comment': 'Coordinates of the image center'},
+                  'PIXELSCALE_TYPE': {'value': 'MEDIAN', 'comment': 'MANUAL,FIT,MIN,MAX or MEDIAN'},
+                  'PIXEL_SCALE': {'value': '0.0', 'comment': 'Pixel scale'},
+                  'IMAGE_SIZE': {'value': '0', 'comment': 'Image size (0 = AUTOMATIC)'},
+                  'RESAMPLE': {'value': 'Y', 'comment': 'Resample input images (Y/N)?'},
+                  'RESAMPLE_DIR': {'value': '.', 'comment': 'Directory path for resampled images'},
+                  'RESAMPLE_SUFFIX': {'value': '.resamp.fits', 'comment': 'filename extension for resampled images'},
+                  'RESAMPLING_TYPE': {'value': 'LANCZOS3',
+                                      'comment': 'NEAREST,BILINEAR,LANCZOS2,LANCZOS3,LANCZOS4 (1 per axis) or FLAGS'},
+                  'OVERSAMPLING': {'value': '0', 'comment': 'Oversampling in each dimension (0 = automatic)'},
+                  'INTERPOLATE': {'value': 'N',
+                                  'comment': 'Interpolate bad input pixels (Y/N)? (all or for each image)'},
+                  'FSCALASTRO_TYPE': {'value': 'FIXED', 'comment': 'NONE,FIXED, or VARIABLE'},
+                  'FSCALE_KEYWORD': {'value': 'FLXSCALE',
+                                     'comment': 'FITS keyword for the multiplicative factor applied to each input '
+                                                'image'},
+                  'FSCALE_DEFAULT': {'value': '1.0', 'comment': 'Default FSCALE value if not in header'},
+                  'GAIN_KEYWORD': {'value': 'GAIN', 'comment': 'FITS keyword for effect. gain (e-/ADU)'},
+                  'GAIN_DEFAULT': {'value': '0.0', 'comment': 'Default gain if no FITS keyword found'},
+                  'SUBTRACT_BACK': {'value': 'Y',
+                                    'comment': 'Subtraction sky background (Y/N)? (all or for each image)'},
+                  'BACK_TYPE': {'value': 'AUTO', 'comment': 'AUTO or MANUAL (all or for each image)'},
+                  'BACK_DEFAULT': {'value': '0.0',
+                                   'comment': 'Default background value in MANUAL (all or for each image)'},
+                  'BACK_SIZE': {'value': '128', 'comment': 'Background mesh size (pixels) (all or for each image)'},
+                  'BACK_FILTERSIZE': {'value': '3',
+                                      'comment': 'Background map filter range (meshes) (all or for each image)'},
+                  'VMEM_DIR': {'value': '.', 'comment': 'Directory path for swap files'},
+                  'VMEM_MAX': {'value': '2047', 'comment': 'Maximum amount of virtual memory (MB)'},
+                  'MEM_MAX': {'value': '256', 'comment': 'Maximum amount of usable RAM (MB)'},
+                  'COMBINE_BUFSIZE': {'value': '256', 'comment': 'RAM dedicated to co-addition(MB)'},
+                  'DELETE_TMPFILES': {'value': 'Y', 'comment': 'Delete temporary resampled FITS files (Y/N)?'},
+                  'COPY_KEYWORDS': {'value': 'OBJECT',
+                                    'comment': 'List of FITS keywords to propagate from the input to the output '
+                                               'headers'},
+                  'WRITE_FILEINFO': {'value': 'N',
+                                     'comment': 'Write information about each input file in the output image header?'},
+                  'WRITE_XML': {'value': 'Y', 'comment': 'Write XML file (Y/N)?'},
+                  'XML_NAME': {'value': 'swarp.xml', 'comment': 'Filename for XML output'},
+                  'VERBOSE_TYPE': {'value': 'NORMAL', 'comment': 'QUIET,LOG,NORMAL, or FULL'},
+                  'NTHREADS': {'value': '0',
+                               'comment': 'Number of simultaneous threads for the SMP version of SWarp 0 = automatic'},
+                  "CONFIG_FILE":
+                      {"comment": '[Extra key] name of the main configuration file',
+                       "value": "swarp.config"},
 
-HEADER_ONLY            N               # Only a header as an output file (Y/N)?
-HEADER_SUFFIX          .head           # Filename extension for additional headers
+                  }
 
-#------------------------------- Input Weights --------------------------------
+    _SW_config_special_keys = ["CONFIG_FILE"]
 
-WEIGHT_TYPE            NONE            # BACKGROUND,MAP_RMS,MAP_VARIANCE
-                                       # or MAP_WEIGHT
-WEIGHT_SUFFIX          .weight.fits    # Suffix to use for weight-maps
-WEIGHT_IMAGE                           # Weightmap filename if suffix not used
-                                       # (all or for each weight-map)
+    def __init__(self):
+        """
+        SExtractor class constructor.
+        """
 
-#------------------------------- Co-addition ----------------------------------
+        self.config = (
+            dict([(k, copy.deepcopy(Swarp._SW_config[k]["value"]))
+                  for k in Swarp._SW_config.keys()]))
 
-COMBINE                Y               # Combine resampled images (Y/N)?
-COMBINE_TYPE           MEDIAN          # MEDIAN,AVERAGE,MIN,MAX,WEIGHTED,CLIPPED
-                                       # CHI-OLD,CHI-MODE,CHI-MEAN,SUM,
-                                       # WEIGHTED_WEIGHT,MEDIAN_WEIGHT,
-                                       # AND,NAND,OR or NOR
+        # print self.config
 
-#-------------------------------- Astrometry ----------------------------------
+        self.program = None
+        self.version = None
 
-CELESTIAL_TYPE         NATIVE          # NATIVE, PIXEL, EQUATORIAL,
-                                       # GALACTIC,ECLIPTIC, or SUPERGALACTIC
-PROJECTION_TYPE        TAN             # Any WCS projection code or NONE
-PROJECTION_ERR         0.001           # Maximum projection error (in output
-                                       # pixels), or 0 for no approximation
-CENTER_TYPE            MANUAL          # MANUAL, ALL or MOST
-CENTER         %(ra)s, %(dec)s         # Coordinates of the image center
-PIXELSCALE_TYPE        MEDIAN          # MANUAL,FIT,MIN,MAX or MEDIAN
-PIXEL_SCALE            0.0             # Pixel scale
-IMAGE_SIZE             %(size)s        # Image size (0 = AUTOMATIC)
+    def update_config(self):
+        """
+        Update the configuration files according to the current
+        in-memory SExtractor configuration.
+        """
 
-#-------------------------------- Resampling ----------------------------------
+        # -- Write main configuration file
+        main_f = __builtin__.open(self.config['CONFIG_FILE'], 'w')
 
-RESAMPLE               Y               # Resample input images (Y/N)?
-RESAMPLE_DIR           .               # Directory path for resampled images
-RESAMPLE_SUFFIX        .resamp.fits    # filename extension for resampled images
+        for key in self.config.keys():
+            if (key in Swarp._SW_config_special_keys):
+                continue
 
-RESAMPLING_TYPE        LANCZOS3        # NEAREST,BILINEAR,LANCZOS2,LANCZOS3
-                                       # LANCZOS4 (1 per axis) or FLAGS
-OVERSAMPLING           0               # Oversampling in each dimension
-                                       # (0 = automatic)
-INTERPOLATE            N               # Interpolate bad input pixels (Y/N)?
-                                       # (all or for each image)
+            value = str(self.config[key])
 
-FSCALASTRO_TYPE        FIXED           # NONE,FIXED, or VARIABLE
-FSCALE_KEYWORD         FLXSCALE        # FITS keyword for the multiplicative
-                                       # factor applied to each input image
-FSCALE_DEFAULT         1.0             # Default FSCALE value if not in header
+            print >>main_f, ("%-16s       %-16s # %s" %
+                             (key, value, Swarp._SW_config[key]['comment']))
 
-GAIN_KEYWORD           GAIN            # FITS keyword for effect. gain (e-/ADU)
-GAIN_DEFAULT           0.0             # Default gain if no FITS keyword found
-
-#--------------------------- Background subtraction ---------------------------
-
-SUBTRACT_BACK          Y               # Subtraction sky background (Y/N)?
-                                       # (all or for each image)
-
-BACK_TYPE              AUTO            # AUTO or MANUAL
-                                       # (all or for each image)
-BACK_DEFAULT           0.0             # Default background value in MANUAL
-                                       # (all or for each image)
-BACK_SIZE              128             # Background mesh size (pixels)
-                                       # (all or for each image)
-BACK_FILTERSIZE        3               # Background map filter range (meshes)
-                                       # (all or for each image)
-
-#------------------------------ Memory management -----------------------------
-
-VMEM_DIR               .               # Directory path for swap files
-VMEM_MAX               2047            # Maximum amount of virtual memory (MB)
-MEM_MAX                256             # Maximum amount of usable RAM (MB)
-COMBINE_BUFSIZE        256             # RAM dedicated to co-addition(MB)
-
-#------------------------------ Miscellaneous ---------------------------------
-
-DELETE_TMPFILES        Y               # Delete temporary resampled FITS files
-                                       # (Y/N)?
-COPY_KEYWORDS          OBJECT          # List of FITS keywords to propagate
-                                       # from the input to the output headers
-WRITE_FILEINFO         N               # Write information about each input
-                                       # file in the output image header?
-WRITE_XML              Y               # Write XML file (Y/N)?
-XML_NAME               swarp.xml       # Filename for XML output
-VERBOSE_TYPE           NORMAL          # QUIET,LOG,NORMAL, or FULL
-
-NTHREADS               0               # Number of simultaneous threads for
-                                       # the SMP version of SWarp
-                                       # 0 = automatic
-    '''
+        main_f.close()
 
     # staticmethod allows to use a single method of a class
-    def coadd(self, img_list, path, root, ra, dec, size):
+    def run(self, img_list, updateconfig=True, clean=False, path=None):
         """
         @param: fullfilename entire path to image
         @type: str
