@@ -546,10 +546,13 @@ class T80SProcess:
             log.debug('Aligning images with reference')
             ix, iy = img1.shape
             img1 = img1[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+            #self.config['objects'][img[2][1]][img[2][2]]['register'] = {'reference': ref_img[0]}
 
             # Todo: Paralellize this!
             for i, img in enumerate(img_list):
                 log.debug('Computing offset for %s' % img[0])
+                if type(self.config['objects'][img[2][1]][img[2][2]]['register']) != type({}):
+                    self.config['objects'][img[2][1]][img[2][2]]['register'] = {'reference': ref_img[0]}
                 try:
                     # Todo: Try to guess a good grid size from the number of stars.
                     img2 = fits.getdata(img[0])[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
@@ -561,8 +564,10 @@ class T80SProcess:
                     log.debug('Offset: %.3f x %.3f' % (result[0], result[1]))
                     # wcs['CRPIX1'] += result[0]
                     # wcs['CRPIX2'] += result[1]
-                    self.config['objects'][img[2][1]][img[2][2]]['register'].append(
-                        (float(result[0]), float(result[1])))
+                    self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])] = (
+                    float(result[0]), float(result[1]))
+                    # self.config['objects'][img[2][1]][img[2][2]]['register'].append(
+                    #     (float(result[0]), float(result[1])))
                     # for key in wcs:
                     #     if key == 'HISTORY' or key == 'COMMENT':
                     #         continue
@@ -696,7 +701,7 @@ class T80SProcess:
             if not os.path.exists(ref_wcs_name):
                 log.error('Reference image wcs %s does not exists. Run astrometry before aligning!' % obj)
                 continue
-
+            log.debug('Reference WCS %s ...' % ref_wcs_name)
             wcs = fits.getheader(ref_wcs_name)
             # Todo: Paralellize this!
             nimg = 0
@@ -706,7 +711,7 @@ class T80SProcess:
                     reg_len = len(self.config['objects'][img[2][1]][img[2][2]]['register'])
                     flatcorr_len = len(self.config['objects'][img[2][1]][img[2][2]]['flatcorr'])
 
-                    if ('register' not in self.config['objects'][img[2][1]][img[2][2]]) or (reg_len != flatcorr_len):
+                    if ('register' not in self.config['objects'][img[2][1]][img[2][2]]):
                         log.error('Offsets for %s not properly set! Run register again.' % obj)
                         continue
 
@@ -721,10 +726,28 @@ class T80SProcess:
                         if key == 'HISTORY' or key == 'COMMENT':
                             continue
                         img2[0].header[key] = wcs[key]
-                    img2[0].header['CRPIX1'] += self.config['objects'][img[2][1]][img[2][2]]['register'][nimg][0]
-                    img2[0].header['CRPIX2'] += self.config['objects'][img[2][1]][img[2][2]]['register'][nimg][1]
+                    crpix1 = float(wcs['CRPIX1'])
+                    crpix2 = float(wcs['CRPIX2'])
+                    dcrpix1 = float(self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][0])
+                    dcrpix2 = float(self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][1])
+                    img2[0].header['CRPIX1'] = crpix1 + dcrpix1
+                    img2[0].header['CRPIX2'] = crpix2 + dcrpix2
+
+                    log.debug('%s: %.3f(%.3f) x %.3f(%.3f) = %.3f(%.3f) x %.3f(%.3f)' % (os.path.basename(img[0]),
+                                                                                         crpix1,
+                                                                                         dcrpix1,
+                                                                                         crpix2,
+                                                                                         dcrpix2,
+                                                                                         img2[0].header['CRPIX1'],
+                                                                                         crpix1 + dcrpix1,
+                                                                                         img2[0].header['CRPIX2'],
+                                                                                         crpix2 + dcrpix2
+                                                                                         ))
                     nimg += 1
 
+                    if overwrite and os.path.exists(img[1]):
+                        log.debug('Removing %s' % img[1])
+                        os.remove(img[1])
                     log.debug('Writing %s' % img[1])
                     img2.writeto(img[1], clobber=overwrite)
                     # offset[0][i] = reg[0]
