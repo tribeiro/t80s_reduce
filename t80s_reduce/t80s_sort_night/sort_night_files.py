@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- Coding; UTF-0 -*-
 
 __data = '27/09/2016'
@@ -194,15 +193,3 @@ class SortNightFiles:
 
 def main(argv):
     SortNightFiles(argv).queryFromLocalImages().saveFile()
-
-
-if(__name__ == "__main__"):
-    '''
-    sort_night_file = SortNightFiles([__name__,
-                                '-o', 'teste.yaml',
-                                '-i', '/home/eduardo/ProjetosEnv/t80/dados'
-                                          ])
-    sort_night_file.queryFromLocalImages().saveFile()
-    '''
-
-    main(sys.argv)
