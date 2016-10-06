@@ -861,8 +861,6 @@ class T80SProcess:
                     continue
                 try:
                     log.debug('Coadding %i images...' % len(img_list))
-                    coadd_swarp = Swarp()
-                    coadd_img = '%s_%s' % (obj.replace(" ","-"), fltr)
                     wpath = os.path.join(self.config['path'],
                                          self.config['objects'][obj]['night'],
                                          obj.replace(' ', '_'),
@@ -871,12 +869,18 @@ class T80SProcess:
                                                                                                    obj]['night'],
                                                                                                obj.replace(' ', '_'),
                                                                                                fltr)
-                    coadd_swarp.coadd([img[0] for img in img_list],
-                                      path=wpath,
-                                      root=coadd_img,
-                                      ra=ref_hdr["RA"],
-                                      dec=ref_hdr["DEC"],
-                                      size=10000)
+                    coadd_img = '%s_%s' % (obj.replace(" ","-"), fltr)
+                    swarp_coadd = Swarp()
+                    with open(swarp_coadd.config['IMAGE_LIST'],'w') as fp:
+                        for img in img_list:
+                            fp.write(img[0]+'\n')
+
+                    swarp_coadd.config['CENTER'] = '%s, %s' % (ref_hdr["RA"],
+                                                               ref_hdr["DEC"])
+                    swarp_coadd.config['IMAGE_SIZE'] = 10000
+                    swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath,coadd_img+'.swarp.fits')
+                    swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath,coadd_img+'.weight.fits')
+                    swarp_coadd.run()
                     log.debug('Saved coadded image to %s' % (os.path.join(wpath,coadd_img)))
                 except Exception, e:
                     log.exception(e)

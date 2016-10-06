@@ -79,10 +79,13 @@ class Swarp:
                   "CONFIG_FILE":
                       {"comment": '[Extra key] name of the main configuration file',
                        "value": "swarp.config"},
+                  "IMAGE_LIST":
+                      {"comment": '[Extra key] name of the image list file',
+                       "value": "swarp_images.lis"},
 
                   }
 
-    _SW_config_special_keys = ["CONFIG_FILE"]
+    _SW_config_special_keys = ["CONFIG_FILE", "IMAGE_LIST"]
 
     def __init__(self):
         """
@@ -118,34 +121,23 @@ class Swarp:
 
         main_f.close()
 
-    # staticmethod allows to use a single method of a class
-    def run(self, img_list, updateconfig=True, clean=False, path=None):
+    def run(self, updateconfig=True, clean=False, path=None):
         """
-        @param: fullfilename entire path to image
-        @type: str
+        Run Swarp.
 
-        @param: findstarmethod (astrometry.net, sex)
-        @type: str
+        If updateconfig is True (default), the configuration
+        files will be updated before running Swarp.
 
-        Does astrometry to image=fullfilename
-        Uses either astrometry.net or sex(tractor) as its star finder
+        If clean is True (default: False), configuration files
+        (if any) will be deleted after Swarp terminates.
+
         """
 
-        # pathname, filename = os.path.split(sexcat_filename)
-        # pathname = pathname + "/"
-        # basefilename, file_xtn = os.path.splitext(filename)
+        if updateconfig:
+            self.update_config()
 
-        config = os.path.join(path,root+"swarp.config")
-        with open(config, "w") as fp:
-            fp.write(self._SW_config % {"ra" : ra,
-                                        "dec" : dec,
-                                        "size" : size})
-        img_list_str = ''
-        for img in img_list:
-            img_list_str += img
-            img_list_str += ' '
-        line = "swarp %s -c %s" % (img_list_str,
-                                   config)
+        line = "swarp @%s -c %s" % (self.config['IMAGE_LIST'],
+                                   self.config['CONFIG_FILE'])
 
         log.debug("RUN: %s" % line)
         # *** it would be nice to add a test here to check
@@ -155,19 +147,16 @@ class Swarp:
         solve = Popen(line.split())  # ,env=os.environ)
         solve.wait()
         log.debug('Swarp finished. Took %3.2f sec' % (time.time() - t0))
+
         # if solution failed, there will be no file .solved
         # wcs_filename = basefilename + ".head"
-        coadd = 'coadd.fits'
-        weight = 'coadd.weight.fits'
-        copyfile(coadd, os.path.join(path,root+'.fits'))
-        copyfile(coadd, os.path.join(path,root+'.weight.fits'))
+        if not os.path.exists(self.config['IMAGEOUT_NAME']):
+            raise SwarpException("Result image %s not found!" % self.config['IMAGEOUT_NAME'])
+
 
         return True
 
 
-class ScampException(Exception):
+class SwarpException(Exception):
     pass
 
-
-class NoSolutionScampException(Exception):
-    pass
