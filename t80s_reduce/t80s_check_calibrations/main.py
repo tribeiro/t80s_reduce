@@ -47,9 +47,13 @@ def main(argv):
 
     # Check that 'calibrations' check exists
     if 'calibrations' not in config:
-        print config
-        log.error('No section "calibrations" in configuration file. Nothing to work on.')
-        exit(-1)
+        # print config
+        log.warning('No section "calibrations" in configuration file. Creating empty one.')
+        config['calibrations'] = {'sky-flat' : {},
+                                  'actions': {'comments':
+                                                  ['%s - Creating section "actions".' % datetime.today().__str__()],
+                                              'flat': {}}}
+
     else:
         # if calibrations exists check that 'actions' section is present and create one, otherwise
         if 'actions' in config['calibrations']:
@@ -57,7 +61,8 @@ def main(argv):
         else:
             log.debug('Apparently, first pass on this configuration file. Creating "actions" section.')
             config['calibrations']['actions'] = {'comments' :
-                                                     ['%s - Creating section "actions".' % datetime.today().__str__()]}
+                                                     ['%s - Creating section "actions".' % datetime.today().__str__()],
+                                                 }
             config['calibrations']['actions']['bias'] = {'closest' : False, 'avoid-nights' : [ ], 'ok' : False}
             config['calibrations']['actions']['flat'] = {}
 
@@ -102,6 +107,9 @@ def main(argv):
                 required_filters.append(filter)
     log.info('%i required filters: %s' % (len(required_filters),
                                           required_filters))
+
+    if 'filters' not in config['calibrations']['sky-flat']:
+        config['calibrations']['sky-flat']['filters'] = required_filters
 
     nmissing = 0
     nok = 0

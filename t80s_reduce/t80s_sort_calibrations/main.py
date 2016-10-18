@@ -60,6 +60,68 @@ def main(argv):
     else:
         log.debug('Running action bias')
 
+        night = config['night']
+        shift_days = 0
+        max_shift = 10
+        year,mm,dd = int(night[:4]),int(night[4:6]),int(night[6:8])
+        today = datetime(year,mm,dd)
+
+        while True:
+            dt = timedelta(days=shift_days)
+            next_try = today+dt
+            night = '%04i%02i%02i' % (next_try.year,
+                                      next_try.month,
+                                      next_try.day)
+
+            if night not in config['calibrations']['actions']['bias']['avoid-nights']:
+                cursor = client.images.fits_keywords.find({'_night': night,
+                                                       'IMAGETYP': 'ZERO'}).sort([('OBJECT', 1),
+                                                                                  ('FILENAME', 1), ])
+                log.debug('Found %i bias in %s' % (cursor.count(),
+                                                    night))
+
+                if cursor.count() >= NBIAS:
+                    config['calibrations']['bias'] = {'night': night,
+                                                      'raw files': [str(item['FILENAME'])
+                                                                    for item in cursor]}
+                    break
+                else:
+                    config['calibrations']['actions']['bias']['avoid-nights'].append(night)
+
+            else:
+                log.debug('Skipping night %s' % night)
+
+            if dt == 0:
+                shift_days += 1
+                continue
+
+            next_try = today-dt
+            night = '%04i%02i%02i' % (next_try.year,
+                                      next_try.month,
+                                      next_try.day)
+            if night not in config['calibrations']['actions']['bias']['avoid-nights']:
+                cursor = client.images.fits_keywords.find({'_night': night,
+                                                       'IMAGETYP': 'ZERO'}).sort([('OBJECT', 1),
+                                                                                  ('FILENAME', 1), ])
+                log.debug('Found %i bias in %s' % (cursor.count(),
+                                                    night))
+
+                if cursor.count() >= NBIAS:
+                    config['calibrations']['bias'] = {'night': night,
+                                                      'raw files': [str(item['FILENAME'])
+                                                                    for item in cursor]}
+                    break
+                else:
+                    config['calibrations']['actions']['bias']['avoid-nights'].append(night)
+
+            else:
+                log.debug('Skipping night %s' % night)
+
+            if shift_days > max_shift:
+                log.warning('Maximum number of iterations reached without finding required number of flats.')
+                break
+            shift_days += 1
+
     for filter in config['calibrations']['actions']['flat']:
         if config['calibrations']['actions']['flat'][filter]['ok']:
             log.debug('Action flat in %s ok. Skipping.' % filter)
