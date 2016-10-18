@@ -240,6 +240,8 @@ class SortData:
                     else:
                         self.targets['objects'][header['OBJECT']][
                         header["FILTER"]] = { 'raw files': [raw]}
+            else:
+                continue
 
             if self.args.work_path is not None:
                 new_mv_dir = os.path.join(self.args.work_path,
