@@ -209,7 +209,7 @@ class T80SProcess:
                 if not os.path.exists(os.path.dirname(img[1])):
                     log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
                     os.mkdir(os.path.dirname(img[1]))
-                imarith(img[0], '-', self.masterbias, img[1], overwrite=overwrite)
+                imarith(str(img[0]), '-', self.masterbias, str(img[1]), overwrite=overwrite)
             except Exception, e:
                 log.exception(e)
                 continue
