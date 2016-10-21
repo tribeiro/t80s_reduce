@@ -136,7 +136,7 @@ class Swarp:
         if updateconfig:
             self.update_config()
 
-        line = "swarp @%s -c %s" % (self.config['IMAGE_LIST'],
+        line = "SWarp @%s -c %s" % (self.config['IMAGE_LIST'],
                                    self.config['CONFIG_FILE'])
 
         log.debug("RUN: %s" % line)
