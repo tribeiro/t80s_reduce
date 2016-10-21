@@ -174,6 +174,7 @@ class T80SProcess:
                 raise
             else:
                 self.masterbias = biasname
+                self.config['calibrations']['bias']['master'] = biasname
         elif key == 'master-flat':
             for filter in self.config['calibrations']['sky-flat']['filters']:
                 if 'master' in self.config['calibrations']['sky-flat'][filter] and not overwrite:
@@ -662,8 +663,12 @@ class T80SProcess:
             sort_mag = np.argsort(out_table['MAG_AUTO'].data)[:400]
 
             axy_table = ref_img[1].replace('.fits', '_axy.fits')
-            if os.path.exists(axy_table) and overwrite:
+            if not os.path.exists(os.path.dirname(axy_table)):
+                log.debug('Path does not exists. Creating %s' % os.path.dirname(axy_table))
+                os.mkdir(os.path.dirname(axy_table))
+            elif os.path.exists(axy_table) and overwrite:
                 os.remove(axy_table)
+
             out_table[sort_mag].write(axy_table, format='fits')
 
             AstrometryNet.solveField(ref_img[0],
