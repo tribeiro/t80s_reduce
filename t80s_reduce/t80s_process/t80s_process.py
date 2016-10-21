@@ -750,6 +750,8 @@ class T80SProcess:
                                                                                          ))
                     nimg += 1
 
+                    if not os.path.exists(os.path.dirname(img[1])):
+                        os.mkdir(os.path.dirname(img[1]))
                     if overwrite and os.path.exists(img[1]):
                         log.debug('Removing %s' % img[1])
                         os.remove(img[1])
