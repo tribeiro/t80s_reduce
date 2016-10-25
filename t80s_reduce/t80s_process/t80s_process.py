@@ -547,7 +547,7 @@ class T80SProcess:
             log.debug('Aligning images with reference')
             ix, iy = img1.shape
             img1 = img1[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
-            #self.config['objects'][img[2][1]][img[2][2]]['register'] = {'reference': ref_img[0]}
+            # self.config['objects'][img[2][1]][img[2][2]]['register'] = {'reference': ref_img[0]}
 
             # Todo: Paralellize this!
             for i, img in enumerate(img_list):
@@ -566,7 +566,7 @@ class T80SProcess:
                     # wcs['CRPIX1'] += result[0]
                     # wcs['CRPIX2'] += result[1]
                     self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])] = (
-                    float(result[0]), float(result[1]))
+                        float(result[0]), float(result[1]))
                     # self.config['objects'][img[2][1]][img[2][2]]['register'].append(
                     #     (float(result[0]), float(result[1])))
                     # for key in wcs:
@@ -733,8 +733,10 @@ class T80SProcess:
                         img2[0].header[key] = wcs[key]
                     crpix1 = float(wcs['CRPIX1'])
                     crpix2 = float(wcs['CRPIX2'])
-                    dcrpix1 = float(self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][0])
-                    dcrpix2 = float(self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][1])
+                    dcrpix1 = float(
+                        self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][0])
+                    dcrpix2 = float(
+                        self.config['objects'][img[2][1]][img[2][2]]['register'][os.path.basename(img[0])][1])
                     img2[0].header['CRPIX1'] = crpix1 + dcrpix1
                     img2[0].header['CRPIX2'] = crpix2 + dcrpix2
 
@@ -859,12 +861,12 @@ class T80SProcess:
                                                 getobject=[obj],
                                                 getfilter=[fltr])
                 ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
-                                                           overwrite=overwrite,
-                                                           getobject=[obj],
-                                                           getfilter='R')[0]
+                                               overwrite=overwrite,
+                                               getobject=[obj],
+                                               getfilter='R')[0]
                 ref_hdr = fits.getheader(ref_img[0])
                 if len(img_list) == 0:
-                    log.warning('No images to combine for %s in %s' % (obj,fltr))
+                    log.warning('No images to combine for %s in %s' % (obj, fltr))
                     continue
                 try:
                     log.debug('Coadding %i images...' % len(img_list))
@@ -876,21 +878,99 @@ class T80SProcess:
                                                                                                    obj]['night'],
                                                                                                obj.replace(' ', '_'),
                                                                                                fltr)
-                    coadd_img = '%s_%s' % (obj.replace(" ","-"), fltr)
+                    coadd_img = '%s_%s' % (obj.replace(" ", "-"), fltr)
                     swarp_coadd = Swarp()
-                    with open(swarp_coadd.config['IMAGE_LIST'],'w') as fp:
+                    with open(swarp_coadd.config['IMAGE_LIST'], 'w') as fp:
                         for img in img_list:
-                            fp.write(img[0]+'\n')
+                            fp.write(img[0] + '\n')
 
                     swarp_coadd.config['CENTER'] = '%s, %s' % (ref_hdr["RA"],
                                                                ref_hdr["DEC"])
                     swarp_coadd.config['IMAGE_SIZE'] = 10000
-                    swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath,coadd_img+'.swarp.fits')
-                    swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath,coadd_img+'.weight.fits')
+                    swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath, coadd_img + '.swarp.fits')
+                    swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath, coadd_img + '.weight.fits')
                     swarp_coadd.run()
-                    log.debug('Saved coadded image to %s' % (os.path.join(wpath,coadd_img)))
+                    log.debug('Saved coadded image to %s' % (os.path.join(wpath, coadd_img)))
                 except Exception, e:
                     log.exception(e)
                     continue
                 else:
                     self.config['objects'][obj][fltr]['coadd'] = coadd_img
+
+    def master_photometry(self, overwrite=False):
+        '''
+        Compute photometry for each field and generate a single catalog per field using coadded images.
+
+        :return:
+        '''
+
+        filter_list = FILTERS
+        object_list = self.config['objects']
+        photometry_detect_filters = self.config[
+            'photometry-detect-filters'] if 'photometry-detection-filters' in self.config else ['R']
+
+        for obj in object_list:
+            phot_files = []
+            detect_files = []
+            for fltr in filter_list:
+                rpath = os.path.join(self.config['path'],
+                                     self.config['objects'][obj]['night'],
+                                     obj.replace(' ', '_'),
+                                     fltr)
+                coadd_img = '%s_%s' % (obj.replace(" ", "-"), fltr)
+                if os.path.exists(os.path.join(rpath, coadd_img + '.fits')):
+                    log.debug('Found %s ...' % coadd_img)
+                    phot_files.append(os.path.join(rpath, coadd_img + '.fits'))
+                    if fltr in photometry_detect_filters:
+                        detect_files.append(os.path.join(rpath, coadd_img + '.fits'))
+                else:
+                    log.warning('File %s not found... Expected to find at %s' % (coadd_img,
+                                                                                 rpath))
+            if len(phot_files) == 0:
+                log.warning('No files to process for object %s. Skipping...' % obj)
+                continue
+            elif len(detect_files) == 0:
+                log.warning('No detection file found for object %s. Skipping...' % obj)
+                continue
+
+            rpath = os.path.join(self.config['path'],
+                                 self.config['objects'][obj]['night'],
+                                 obj.replace(' ', '_'))
+
+            wpath = rpath if 'wpath' not in self.config else os.path.join(self.config['wpath'],
+                                                                          self.config['objects'][object]['night'],
+                                                                          object.replace(' ', '_'))
+
+            # Creating/selecting detection image
+
+            detect_img = '%s.detection.fits' % (obj.replace(" ", "-"))
+            if len(detect_files) > 1:
+                if os.path.exists(os.path.join(wpath, detect_img)) and not overwrite:
+                    log.warning('Detection image already exists.')
+                else:
+                    log.debug('Creating detection image, combining %i frames' % len(detect_files))
+                    imcombine(detect_files, output=detect_img, overwrite=overwrite)
+            else:
+                detect_img = detect_files[0]
+
+            sex = SExtractor()
+
+            # default params
+            with open(self.config['master-photometry-sex-config'], 'r') as fp:
+                sex_config = yaml.load(fp)
+            for key in sex_config.keys():
+                sex.config[key] = sex_config[key]
+            # sex.config['CONFIG_FILE'] = self.config['master-photometry-sex-config']
+
+            # ok, here we go!
+            log.info('Running sextractor')
+            # copyfile(rpath[0],wpath[0])
+            # log.debug('Processing %s...' % ref_img[0])
+            for img in phot_files:
+                sex.config['CATALOG_NAME'] = img.replace('.fits', '.cat')
+                sex.config['CHECKIMAGE_TYPE'] = 'APERTURES,SEGMENTATION'
+                sex.config['CHECKIMAGE_NAME'] = '%s,%s' % (img.replace('.fits', '.apert.fits'),
+                                                           img.replace('.fits', '.segm.fits'))
+                sex.run('%s,%s' % (detect_img,
+                                   img), clean=False,
+                        path=self.config['sex-path'])

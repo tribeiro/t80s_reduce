@@ -37,7 +37,7 @@ This script will do:
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
                                  'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register', 'astrometry',
-                                 'astrometry-align', 'coadd'])
+                                 'astrometry-align', 'coadd', 'master-photometry'])
     parser.add_argument("--overwrite", action="store_true",
                         help='Overwrite existing processed images.')
 
@@ -102,6 +102,9 @@ This script will do:
     elif args.action == 'coadd':
         log.debug('Coadding images.')
         process.coadd(overwrite=args.overwrite)
+    elif args.action == 'master-photometry':
+        log.debug('Generating master photometric catalogs.')
+        process.master_photometry(overwrite=args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 
