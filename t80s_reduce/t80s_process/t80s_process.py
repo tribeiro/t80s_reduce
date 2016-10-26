@@ -521,12 +521,12 @@ class T80SProcess:
             img1 = fits.getdata(ref_img[0])
             ix, iy = img1.shape
             register_region = [ix / 2 - 1000,ix / 2 + 1000, iy / 2 - 1000,iy / 2 + 1000]
-            if 'register-region' in self['config']:
+            if 'register-region' in self.config:
 
-                register_region[0] = self['config']['register-region'][0]
-                register_region[1] = self['config']['register-region'][1]
-                register_region[2] = self['config']['register-region'][2]
-                register_region[3] = self['config']['register-region'][3]
+                register_region[0] = self.config['register-region'][0]
+                register_region[1] = self.config['register-region'][1]
+                register_region[2] = self.config['register-region'][2]
+                register_region[3] = self.config['register-region'][3]
                 log.debug('Using user-defined region %s' % register_region)
             img1 = img1[register_region[0]:register_region[1],register_region[2]:register_region[3]]
 
