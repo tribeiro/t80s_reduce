@@ -5,7 +5,7 @@ import yaml
 from astropy.io import fits, ascii
 import datetime
 from distutils.dir_util import mkpath
-from shutil import copyfile
+from shutil import copyfile, move
 # import imreg_dft as ird
 import image_registration
 
@@ -156,8 +156,11 @@ class T80SProcess:
                     config['objects'][object][filter][write_file_type] = []
 
                 for raw in config['objects'][object][filter][get_file_type]:
-                    img_list.append((os.path.join(rpath, get_file_type.replace(' ', '_'), raw),
-                                     os.path.join(wpath, write_file_type.replace(' ', '_'), raw),
+                    rfile = os.path.join(rpath, get_file_type.replace(' ', '_'), raw)
+                    wfile = os.path.join(wpath, write_file_type.replace(' ', '_'), raw) if write_file_type is not None \
+                        else ''
+                    img_list.append((rfile,
+                                     wfile,
                                      ('target', object, filter)))
         return img_list
 
@@ -180,8 +183,34 @@ class T80SProcess:
                 if 'master' in self.config['calibrations']['sky-flat'][filter] and not overwrite:
                     log.warning('Master flat already created. Run in overwrite mode to continue.')
                     continue
+
                 log.debug('Creating master flat in %s' % filter)
                 imglist = self.get_flat_list(get_file_type='norm', getfilter=[filter])
+
+                if 'flat-par' in self.config:
+
+                    log.debug('Selecting frames with average count between %s and %s' % (self.config['flat-par']['min'],
+                                                                                         self.config['flat-par']['max']
+                                                                                         ))
+                    good_flats = []
+                    for img in imglist:
+                        hdr = fits.getheader(img[0])
+                        dmean = float(hdr['NORMFAC'])
+                        log.debug('%s: %10.2f' % (os.path.basename(img[0]),
+                                                  dmean))
+                        if ( self.config['flat-par']['min'] < dmean < self.config['flat-par']['max'] ):
+                            good_flats.append(img)
+                    if len(good_flats) < 3:
+                        log.critical('No good flats found in this sequence!')
+                        continue
+                    elif len(good_flats) < NFLATS:
+                        log.warning('Number of good flats is smaller than expected! Found %i of %i. Minumum is %i' % (
+                            len(good_flats),
+                            len(imglist),
+                            NFLATS))
+                    imglist = good_flats
+
+
                 path = os.path.join(self.config['path'],
                                     self.config['calibrations']['sky-flat'][filter]['night'],
                                     'flat',
@@ -361,9 +390,11 @@ class T80SProcess:
                                              data=newdata)
                 header_comments = ["NORMALIZE: %s" % datetime.datetime.now(),
                                    "NORMALIZE: factor = %f" % normfactor]
+                output_hdu.header['NORMFAC'] = normfactor
 
                 for comment in header_comments:
                     output_hdu.header["COMMENT"] = comment
+
                 output_hdulist = fits.HDUList([output_hdu])
 
                 if not os.path.exists(os.path.dirname(img[1])):
@@ -974,3 +1005,39 @@ class T80SProcess:
                 sex.run('%s,%s' % (detect_img,
                                    img), clean=False,
                         path=self.config['sex-path'])
+
+    def single_photometry(self, objname, overwrite=False):
+
+        img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
+                                        overwrite=overwrite,
+                                        getobject=[objname])
+
+        sex = SExtractor()
+        # default params
+        with open(self.config['master-photometry-sex-config'], 'r') as fp:
+            sex_config = yaml.load(fp)
+        for key in sex_config.keys():
+            sex.config[key] = sex_config[key]
+
+        sex.config['CONFIG_FILE'] = self.config['sex-config']
+
+        for img in img_list:
+            log.debug('Performing photometry in %s' % img[0])
+            # copyfile(rpath[0],wpath[0])
+            # log.debug('Processing %s...' % ref_img[0])
+            # sex.config['CATALOG_NAME'] = img[0].replace('.fits', '.cat')
+            # sex.config['CHECKIMAGE_TYPE'] = 'APERTURES,SEGMENTATION'
+            # sex.config['CHECKIMAGE_NAME'] = '%s,%s' % (img[0].replace('.fits', '.apert.fits'),
+            #                                            img[0].replace('.fits', '.segm.fits'))
+            sex.run(img[0], updateconfig=False, clean=False,
+                    path=self.config['sex-path'])
+            if os.path.exists(self.config['sex-catalog-name']):
+                move(self.config['sex-catalog-name'],
+                     img[0].replace('.fits', '.cat'))
+                move('test.aper.fits',
+                     img[0].replace('.fits', '.aper.fits'))
+                move('test.segm.fits',
+                     img[0].replace('.fits', '.segm.fits'))
+                move('test.backg.fits',
+                     img[0].replace('.fits', '.backg.fits'))
+

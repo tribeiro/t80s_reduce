@@ -456,33 +456,33 @@ class SExtractor:
 
         # First check the filter itself
 
-        filter = self.config['FILTER_MASK']
-        rows = len(filter)
-        cols = len(filter[0])   # May raise ValueError, OK
-
-        filter_f = __builtin__.open(self.config['FILTER_NAME'], 'w')
-        filter_f.write("CONV NORM\n")
-        filter_f.write("# %dx%d Generated from sextractor.py module.\n" %
-                       (rows, cols))
-        for row in filter:
-            filter_f.write(" ".join(map(repr, row)))
-            filter_f.write("\n")
-
-        filter_f.close()
-
-        # -- Write parameter list file
-
-        parameters_f = __builtin__.open(self.config['PARAMETERS_NAME'], 'w')
-        for parameter in self.config['PARAMETERS_LIST']:
-            print >>parameters_f, parameter
-
-        parameters_f.close()
-
-        # -- Write NNW configuration file
-
-        nnw_f = __builtin__.open(self.config['STARNNW_NAME'], 'w')
-        nnw_f.write(nnw_config)
-        nnw_f.close()
+        # filter = self.config['FILTER_MASK']
+        # rows = len(filter)
+        # cols = len(filter[0])   # May raise ValueError, OK
+        #
+        # filter_f = __builtin__.open(self.config['FILTER_NAME'], 'w')
+        # filter_f.write("CONV NORM\n")
+        # filter_f.write("# %dx%d Generated from sextractor.py module.\n" %
+        #                (rows, cols))
+        # for row in filter:
+        #     filter_f.write(" ".join(map(repr, row)))
+        #     filter_f.write("\n")
+        #
+        # filter_f.close()
+        #
+        # # -- Write parameter list file
+        #
+        # parameters_f = __builtin__.open(self.config['PARAMETERS_NAME'], 'w')
+        # for parameter in self.config['PARAMETERS_LIST']:
+        #     print >>parameters_f, parameter
+        #
+        # parameters_f.close()
+        #
+        # # -- Write NNW configuration file
+        #
+        # nnw_f = __builtin__.open(self.config['STARNNW_NAME'], 'w')
+        # nnw_f.write(nnw_config)
+        # nnw_f.close()
 
         # -- Write main configuration file
         main_f = __builtin__.open(self.config['CONFIG_FILE'], 'w')

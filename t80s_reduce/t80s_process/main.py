@@ -37,7 +37,10 @@ This script will do:
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
                                  'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register', 'astrometry',
-                                 'astrometry-align', 'coadd', 'master-photometry'])
+                                 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry'])
+    parser.add_argument('--object',
+                        help='Choose one object from database to process (works only with single-photometry, for now).',
+                        type=str)
     parser.add_argument("--overwrite", action="store_true",
                         help='Overwrite existing processed images.')
 
@@ -105,6 +108,13 @@ This script will do:
     elif args.action == 'master-photometry':
         log.debug('Generating master photometric catalogs.')
         process.master_photometry(overwrite=args.overwrite)
+    elif args.action == 'single-photometry':
+        if args.object is not None:
+            log.debug('Generating photometric catalogs for each image of %s.' % args.object)
+        else:
+            log.error('Single-photometry requires an object to process. Choose one with --object option.')
+            return -1
+        process.single_photometry(objname=args.object, overwrite=args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 
