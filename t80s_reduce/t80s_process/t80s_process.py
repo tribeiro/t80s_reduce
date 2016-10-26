@@ -520,7 +520,13 @@ class T80SProcess:
             log.debug('Aligning images with reference')
             img1 = fits.getdata(ref_img[0])
             ix, iy = img1.shape
-            img1 = img1[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+            register_region = [ix / 2 - 1000,ix / 2 + 1000, iy / 2 - 1000,iy / 2 + 1000]
+            if 'register-region' in self['config']:
+                register_region[0] = self['config']['register-region'][0]
+                register_region[1] = self['config']['register-region'][1]
+                register_region[2] = self['config']['register-region'][2]
+                register_region[3] = self['config']['register-region'][3]
+            img1 = img1[register_region[0]:register_region[1],register_region[2]:register_region[3]]
 
             # Todo: Paralellize this!
             for i, img in enumerate(img_list):
@@ -528,7 +534,8 @@ class T80SProcess:
                     if not os.path.exists(os.path.dirname(img[1])):
                         log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
                         mkpath(os.path.dirname(img[1]))
-                    img2 = fits.getdata(img[0])[ix / 2 - 1000:ix / 2 + 1000, iy / 2 - 1000:iy / 2 + 1000]
+                    img2 = fits.getdata(img[0])[register_region[0]:register_region[1],
+                           register_region[2]:register_region[3]]
                     result = image_registration.chi2_shift(img1, img2)
                     # tvec = result["tvec"].round(4)
 
