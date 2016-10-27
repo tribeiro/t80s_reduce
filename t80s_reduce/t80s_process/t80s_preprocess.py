@@ -36,7 +36,8 @@ class T80SPreProc(OverscanCorr):
         level_start = np.zeros_like(self._ccdsections)
         level_end = np.zeros_like(self._ccdsections)
         n_gain = np.zeros_like(self._ccdsections) + 1.0 / np.median(self.ccd.data)
-
+        self.ccd.header['NORMFAC'] = np.median(self.ccd.data)
+        
         for i in range(0,len(self._ccdsections),2):
             subarr = self._ccdsections[i]
         # for i,subarr in enumerate(self._ccdsections):
@@ -63,7 +64,7 @@ class T80SPreProc(OverscanCorr):
         for i in range(3,len(level_start),2):
             n_gain[i] = n_gain[i-2] * level_end[i-2] / level_start[i]
 
-        print n_gain
+        # print n_gain
 
         for i,subarr in enumerate(self._ccdsections):
             # print scan_level
