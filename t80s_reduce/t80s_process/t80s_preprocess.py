@@ -26,6 +26,53 @@ class T80SPreProc(OverscanCorr):
         newdata /= np.median(self.ccd.data)
         self.ccd.data = newdata
 
+    def norm_section(self):
+        norm_img = np.zeros_like(self.ccd.data,dtype=np.float)
+
+        # import pyds9 as ds9
+
+        # d = ds9.ds9()
+
+        level_start = np.zeros_like(self._ccdsections)
+        level_end = np.zeros_like(self._ccdsections)
+        n_gain = np.zeros_like(self._ccdsections) + 1.0 / np.median(self.ccd.data)
+
+        for i in range(0,len(self._ccdsections),2):
+            subarr = self._ccdsections[i]
+        # for i,subarr in enumerate(self._ccdsections):
+            # print scan_level
+            # norm_img[subarr.section] = np.median(self.ccd.data[subarr.section])
+            # d.set_np2arr(self.ccd.data[subarr.section]) #[:,-10:])
+            # return
+            level_start[i] = np.median(self.ccd.data[subarr.section][:,:2])
+            level_end[i] = np.median(self.ccd.data[subarr.section][:,-2:])
+
+        for i in range(1,len(self._ccdsections),2):
+            subarr = self._ccdsections[i]
+        # for i,subarr in enumerate(self._ccdsections):
+            # print scan_level
+            # norm_img[subarr.section] = np.median(self.ccd.data[subarr.section])
+            # d.set_np2arr(self.ccd.data[subarr.section]) #[:,-10:])
+            # return
+            level_start[i] = np.median(self.ccd.data[subarr.section][:,:10])
+            level_end[i] = np.median(self.ccd.data[subarr.section][:,-10:])
+
+        for i in range(2,len(level_start),2):
+            n_gain[i] = n_gain[i-2] * level_end[i-2] / level_start[i]
+
+        for i in range(3,len(level_start),2):
+            n_gain[i] = n_gain[i-2] * level_end[i-2] / level_start[i]
+
+        print n_gain
+
+        for i,subarr in enumerate(self._ccdsections):
+            # print scan_level
+            norm_img[subarr.section] = n_gain[i]
+
+        newdata = np.zeros_like(self.ccd.data,dtype=np.float) + self.ccd.data
+        newdata *= norm_img
+        self.ccd.data = newdata
+
     def get_avg(self, filename):
         level = np.zeros((self._parallelports,self._serialports))
         for subarr in self._ccdsections:

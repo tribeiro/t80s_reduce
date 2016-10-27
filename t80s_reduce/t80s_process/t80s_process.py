@@ -410,6 +410,64 @@ class T80SProcess:
             else:
                 self.config['calibrations']['sky-flat'][img[2][1]]['norm'].append(os.path.basename(img[1]))
 
+    def normalize_flatfield_channel(self, overwrite=False, nhdu=0):
+        if 'trimmed_overscan_config' not in self.config:
+            raise IOError('Overscan configuration for trimmed data not in configuration file.')
+
+        img_list = self.get_flat_list(get_file_type='trim', write_file_type='norm', overwrite=overwrite)
+
+        # Todo: Paralellize this!
+        for img in img_list:
+            try:
+                normcorr = T80SPreProc()
+                log.info('Reading in %s' % img[0])
+                normcorr.read('%s' % img[0])
+
+                log.info('Loading configuration from %s' % self.config['trimmed_overscan_config'])
+                normcorr.loadConfiguration(self.config['trimmed_overscan_config'])
+
+                if not os.path.exists(os.path.dirname(img[1])):
+                    log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                    os.mkdir(os.path.dirname(img[1]))
+                elif os.path.exists(img[1]) and overwrite:
+                    log.debug('Removing existing file %s' % img[1])
+                    os.remove(img[1])
+
+                normcorr.norm_section()
+                log.debug('Writing %s' % img[1])
+                normcorr.ccd.write(img[1])
+
+                # log.info('Reading in %s' % img[0])
+                # hdulist = fits.open(img[0])
+                # normfactor = np.mean(hdulist[nhdu].data)
+                # log.debug('Normalizing')
+                # newdata = np.zeros_like(hdulist[nhdu].data, dtype=np.float32)
+                # newdata += hdulist[nhdu].data
+                # newdata /= normfactor
+                # output_hdu = fits.PrimaryHDU(header=hdulist[nhdu].header,
+                #                              data=newdata)
+                # header_comments = ["NORMALIZE: %s" % datetime.datetime.now(),
+                #                    "NORMALIZE: factor = %f" % normfactor]
+                # output_hdu.header['NORMFAC'] = normfactor
+                #
+                # for comment in header_comments:
+                #     output_hdu.header["COMMENT"] = comment
+                #
+                # output_hdulist = fits.HDUList([output_hdu])
+                #
+                # if not os.path.exists(os.path.dirname(img[1])):
+                #     log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                #     os.mkdir(os.path.dirname(img[1]))
+                #
+                # log.info('Saving output to %s' % img[1])
+                # output_hdulist.writeto(img[1], clobber=overwrite)
+
+            except Exception, e:
+                log.exception(e)
+                continue
+            else:
+                self.config['calibrations']['sky-flat'][img[2][1]]['norm'].append(os.path.basename(img[1]))
+
     def flatcorr(self, overwrite=False):
 
         # Building file list

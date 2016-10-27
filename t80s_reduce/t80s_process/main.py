@@ -36,8 +36,8 @@ This script will do:
     parser.add_argument('--action',
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
-                                 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register', 'astrometry',
-                                 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry'])
+                                 'norm-flat-channel', 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register',
+                                 'astrometry', 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry'])
     parser.add_argument('--object',
                         help='Choose one object from database to process (works only with single-photometry, for now).',
                         type=str)
@@ -82,6 +82,9 @@ This script will do:
     elif args.action == 'norm-flat':
         log.debug('Normalize flat field images.')
         process.normalize_flatfield(overwrite=args.overwrite)
+    elif args.action == 'norm-flat-channel':
+        log.debug('Normalize flat field images.')
+        process.normalize_flatfield_channel(overwrite=args.overwrite)
     elif args.action == 'master-flat':
         log.debug('Creating master flat per filter.')
         process.imcombine('master-flat', overwrite=args.overwrite)
