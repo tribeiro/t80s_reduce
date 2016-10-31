@@ -23,6 +23,9 @@ class Swarp:
                   'WEIGHT_SUFFIX': {'value': '.weight.fits', 'comment': 'Suffix to use for weight-maps'},
                   'WEIGHT_IMAGE': {'value': '#',
                                    'comment': 'Weightmap filename if suffix not used (all or for each weight-map)'},
+                  'BLANK_BADPIXELS' : {'value' : 'N',
+                                       'comment': 'If true, pixels with a weight of zero are set to zero in the '
+                                                  'combined image.'},
                   'COMBINE': {'value': 'Y', 'comment': 'Combine resampled images (Y/N)?'},
                   'COMBINE_TYPE': {'value': 'MEDIAN',
                                    'comment': 'MEDIAN,AVERAGE,MIN,MAX,WEIGHTED,CLIPPED,CHI-OLD,CHI-MODE,CHI-MEAN,SUM,'

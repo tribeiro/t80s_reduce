@@ -37,7 +37,8 @@ This script will do:
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
                                  'norm-flat-channel', 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register',
-                                 'astrometry', 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry'])
+                                 'astrometry', 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry',
+                                 'prep-extinction','extinction'])
     parser.add_argument('--object',
                         help='Choose one object from database to process (works only with single-photometry, for now).',
                         type=str)
@@ -118,6 +119,10 @@ This script will do:
             log.error('Single-photometry requires an object to process. Choose one with --object option.')
             return -1
         process.single_photometry(objname=args.object, overwrite=args.overwrite)
+    elif args.action == 'prep-extinction':
+        process.prep_extinction()
+    elif args.action == 'extinction':
+        process.extinction()
     else:
         log.error('No such option %s' % args.action)
 

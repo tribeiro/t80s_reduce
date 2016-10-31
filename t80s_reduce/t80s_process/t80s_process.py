@@ -2,7 +2,13 @@ import os
 import numpy as np
 import logging
 import yaml
+import copy
+import time
 from astropy.io import fits, ascii
+from astropy import units as u
+from astropy.coordinates import SkyCoord
+from astropy.coordinates import FK5
+
 import datetime
 from distutils.dir_util import mkpath
 from shutil import copyfile, move
@@ -35,8 +41,23 @@ class T80SProcess:
 
     def __del__(self):
         log.debug('Rewriting configuration file %s' % self._config_file)
+        filename,ext = os.path.splitext(self._config_file)
+        backup_name = "%s-%s%s" % (filename,
+                                   time.strftime("%Y%m%d-%H%M%S"),
+                                   ext)
+        copyfile(self._config_file,
+                 backup_name)
         with open(self._config_file, 'w') as fp:
-            yaml.dump(self.config, fp, default_flow_style=False)
+            try:
+                yaml.dump(self.config, fp, default_flow_style=False)
+            except Exception,e:
+                copyfile(backup_name,
+                         self._config_file)
+                # print self.config
+                log.exception(e)
+                log.warning('Could not save configuration file. Restoring last backup.')
+
+
 
     @property
     def masterbias(self):
@@ -991,6 +1012,10 @@ class T80SProcess:
 
                     swarp_coadd.config['CENTER'] = '%s, %s' % (ref_hdr["RA"],
                                                                ref_hdr["DEC"])
+                    if 'coadd-weight-map' in self.config and os.path.exists(self.config['coadd-weight-map']):
+                        swarp_coadd.config['WEIGHT_IMAGE'] = self.config['coadd-weight-map']
+                        swarp_coadd.config['WEIGHT_TYPE'] = 'MAP_WEIGHT'
+                        swarp_coadd.config['BLANK_BADPIXELS'] = 'Y'
                     swarp_coadd.config['IMAGE_SIZE'] = 10000
                     swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath, coadd_img + '.swarp.fits')
                     swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath, coadd_img + '.weight.fits')
@@ -1115,3 +1140,169 @@ class T80SProcess:
                 move('test.backg.fits',
                      img[0].replace('.fits', '.backg.fits'))
 
+    def prep_extinction(self,obs_type="EXTMONI"):
+        '''
+        Prepare catalog to measure zero point and extinction.
+
+        :param obs_type:
+        :return:
+        '''
+
+        # Determine which targets belongs to extintion monitor
+        object_list = []
+        cat = []
+
+        for ext_object in self.config['objects']:
+            if self.config['objects'][ext_object]['type'] == obs_type:
+                # Checking that required information is present
+                if 'plus-spec' not in self.config['objects'][ext_object] and \
+                                'catalog' not in self.config['objects'][ext_object]['plus-spec'] and \
+                                'filter-translation' not in self.config['objects'][ext_object]['plus-spec']:
+                    raise IOError('Required information on %s not found. Set source catalog and filter translation '
+                                  'information. Skipping...' % ext_object)
+
+                log.debug('Adding %s to extinction catalog.' % ext_object)
+                object_list.append(ext_object)
+
+        # gather information on each target
+        for ext_object in object_list:
+            field_cat = {'calib_spec' : {},
+                         'inst_spec' : {}}
+            log.debug('Working on %s' % ext_object)
+            # open spectrum
+            log.debug(
+                'Found %i source%s in catalog.' % (len(self.config['objects'][ext_object]['plus-spec']['catalog']),
+                                                   '' if len(self.config['objects'][ext_object]['plus-spec'][
+                                                                 'catalog']) < 2 else 's'))
+
+            for i,source in enumerate(self.config['objects'][ext_object]['plus-spec']['catalog']):
+                field_cat['calib_spec'][str(source['id'])] = {}
+                field_cat['inst_spec'][str(source['id'])] = {}
+                data = np.load(source['file'])
+                for i in range(len(data)):
+                    field_cat['calib_spec'][str(source['id'])][str(data['name'][i])] = {'mag': float(data['mag'][i])}
+                    field_cat['inst_spec'][str(source['id'])][str(data['name'][i])] = {'mag': [],
+                                                               'sigma':  [],
+                                                               'secz': []}
+
+                # field_cat['calib_spec'][str(source['id'])] = dict(
+                #     [(line['name'], {'mag': float(line['mag']), 'sigma':  0.0, 'secz': 0.0}) for line
+                #      in
+                #      np.load(source['file'])])
+                # field_cat['inst_spec'][str(source['id'])] = dict(
+                #     [(line['name'], {'mag': float(line['mag']), 'sigma':  0.0, 'secz': 0.0}) for line
+                #      in
+                #      np.load(source['file'])])
+                # print cat[i]['calib_spec']
+                # obs_spec = calib_spec.copy()
+
+
+            for flt in FILTERS:
+                tflt = self.config['objects'][ext_object]['plus-spec']['filter-translation'][flt]
+
+                # cat.append(cat_entry)
+                img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
+                                                overwrite=False,
+                                                getobject=[ext_object],
+                                                getfilter=[flt])
+                for img in img_list:
+                    sexcat_name = img[0].replace('.fits', '.cat')
+                    if not os.path.exists(sexcat_name):
+                        raise IOError('Image/catalog pair not found for %s! Try processing this target with '
+                                      'single-photometry or exclude it from the list!' % img[0])
+
+                    log.debug('Found %s image/catalog in %s' % (ext_object,
+                                                                os.path.basename(img[0])))
+
+                    sex_table = ascii.read(sexcat_name)
+                    sex_catalog = SkyCoord(ra=sex_table['ALPHA_J2000'],
+                                           dec=sex_table['DELTA_J2000'])
+
+                    hdr = fits.getheader(img[0])
+                    for isrc, source in enumerate(self.config['objects'][ext_object]['plus-spec']['catalog']):
+                        coord = SkyCoord("%s %s" % (source['RA'],source['DEC']),
+                                         frame=FK5,
+                                         unit=(u.hourangle, u.deg))
+                        idx, d2d, d3d = coord.match_to_catalog_sky(sex_catalog) # Todo: Threshold separation
+                        field_cat['inst_spec'][source['id']][tflt]['mag'].append(float(sex_table['MAG_AUTO'][idx]))
+                        field_cat['inst_spec'][source['id']][tflt]['sigma'].append(float(sex_table['MAGERR_AUTO'][idx]))
+                        field_cat['inst_spec'][source['id']][tflt]['secz'].append(float(hdr['AIRMASS']))
+                        #
+                        log.debug(
+                            'Source %i @ (ra,dec): %s, %s (dist. %.2f )Mag. %s: (catalog/observed) '
+                            '%.2f/(%.2f/%.2f/%.2f)' % (
+                            isrc + 1, source['RA'], source['DEC'], d2d.value, flt,
+                            float(field_cat['calib_spec'][source['id']][tflt]['mag']),
+                            float(field_cat['inst_spec'][source['id']][tflt]['mag'][-1]),
+                            float(field_cat['inst_spec'][source['id']][tflt]['sigma'][-1]),
+                            float(field_cat['inst_spec'][source['id']][tflt]['secz'][-1])))
+            # cat.append(field_cat)
+            self.config['objects'][ext_object]['plus-spec']['ext-cat'] = field_cat
+            # self.config['objects'][ext_object]['plus-spec']['catalog'] = cat
+
+        # print cat
+
+    def extinction(self,obs_type="EXTMONI"):
+        '''
+        Measure zero point and extinction.
+
+        :param obs_type:
+        :return:
+        '''
+
+        # Determine which targets belongs to extintion monitor
+        object_list = []
+        cat = []
+
+        for ext_object in self.config['objects']:
+            if self.config['objects'][ext_object]['type'] == obs_type:
+                # Checking that required information is present
+                if 'plus-spec' not in self.config['objects'][ext_object] and 'ext-cat' not in \
+                        self.config['objects'][ext_object]['plus-spec']:
+                    raise IOError('Required information on %s not found. You may need to run prep-extinction before '
+                                  'trying to calculate extinction.' % ext_object)
+
+
+                log.debug('Adding %s to extinction catalog.' % ext_object)
+                object_list.append(ext_object)
+
+        # check that catalog was generated
+        if len(object_list) == 0:
+            raise IOError('No extinction monitor object found in configuration file!')
+
+        # Build data structure
+
+        import pylab as py
+
+        for flt in FILTERS:
+            ext_cat = np.array([],dtype=[('mag',np.float),
+                                         ('secz',np.float)])
+            for ext_object in object_list:
+                tflt = self.config['objects'][ext_object]['plus-spec']['filter-translation'][flt]
+                for isrc, source in enumerate(self.config['objects'][ext_object]['plus-spec']['catalog']):
+                    for itr in range(len(self.config['objects'][ext_object]['plus-spec']['ext-cat']['inst_spec'][
+                                             source['id']][tflt]['mag'])):
+                        ext_cat = np.append(ext_cat,
+                                            np.array((self.config['objects'][ext_object]['plus-spec']['ext-cat'][
+                                                          'inst_spec'][
+                                                          source['id']][tflt]['mag'][itr] -
+                                                      self.config['objects'][ext_object]['plus-spec']['ext-cat'][
+                                                          'calib_spec'][
+                                                          source['id']][tflt]['mag'],
+                                                      self.config['objects'][ext_object]['plus-spec']['ext-cat'][
+                                                          'inst_spec'][
+                                                          source['id']][tflt]['secz'][itr]),
+                                                     dtype=[('mag', np.float),
+                                                            ('secz', np.float)]))
+            sol = np.polyfit(ext_cat['secz'],
+                             ext_cat['mag'],
+                             1)
+            py.title(flt)
+            xx = np.linspace(1.0,2.5)
+            py.plot(ext_cat['secz'],
+                    ext_cat['mag'],
+                    'o')
+            py.plot(xx,
+                    np.polyval(sol,xx),
+                    '-')
+            py.show()
