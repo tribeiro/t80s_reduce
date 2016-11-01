@@ -981,16 +981,16 @@ class T80SProcess:
     def coadd(self, overwrite=False):
 
         for obj in self.config['objects']:
+            ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
+                                           overwrite=overwrite,
+                                           getobject=[obj],
+                                           getfilter='R')[0]
+            ref_hdr = fits.getheader(ref_img[0])
             for fltr in FILTERS:
                 img_list = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
                                                 overwrite=overwrite,
                                                 getobject=[obj],
                                                 getfilter=[fltr])
-                ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
-                                               overwrite=overwrite,
-                                               getobject=[obj],
-                                               getfilter='R')[0]
-                ref_hdr = fits.getheader(ref_img[0])
                 if len(img_list) == 0:
                     log.warning('No images to combine for %s in %s' % (obj, fltr))
                     continue
