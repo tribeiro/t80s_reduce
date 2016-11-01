@@ -38,7 +38,7 @@ This script will do:
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
                                  'norm-flat-channel', 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register',
                                  'astrometry', 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry',
-                                 'prep-extinction','extinction'])
+                                 'prep-extinction','extinction', 'slr'])
     parser.add_argument('--object',
                         help='Choose one object from database to process (works only with single-photometry, for now).',
                         type=str)
@@ -123,6 +123,13 @@ This script will do:
         process.prep_extinction()
     elif args.action == 'extinction':
         process.extinction()
+    elif args.action == 'slr':
+        if args.object is not None:
+            log.debug('Calibrating %s data with SLR.' % args.object)
+        else:
+            log.error('SLR requires an object to process. Choose one with --object option.')
+            return -1
+        process.slr(objname=args.object, overwrite=args.overwrite)
     else:
         log.error('No such option %s' % args.action)
 

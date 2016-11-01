@@ -989,7 +989,7 @@ class T80SProcess:
                 ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
                                                overwrite=overwrite,
                                                getobject=[obj],
-                                               getfilter='R')[0]
+                                               getfilter=['R'])[0]
                 ref_hdr = fits.getheader(ref_img[0])
                 if len(img_list) == 0:
                     log.warning('No images to combine for %s in %s' % (obj, fltr))
@@ -1019,12 +1019,17 @@ class T80SProcess:
                     swarp_coadd.config['IMAGE_SIZE'] = 10000
                     swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath, coadd_img + '.swarp.fits')
                     swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath, coadd_img + '.weight.fits')
+                    if os.path.exists(swarp_coadd.config['IMAGEOUT_NAME']) and not overwrite:
+                        log.warning('File already exists, run in overwrite mode!')
+                        self.config['objects'][obj][fltr]['coadd'] = coadd_img
+                        continue
                     swarp_coadd.run()
                     log.debug('Saved coadded image to %s' % (os.path.join(wpath, coadd_img)))
                 except Exception, e:
                     log.exception(e)
                     continue
                 else:
+                    log.debug('%s' % coadd_img)
                     self.config['objects'][obj][fltr]['coadd'] = coadd_img
 
     def master_photometry(self, overwrite=False):
@@ -1306,3 +1311,47 @@ class T80SProcess:
                     np.polyval(sol,xx),
                     '-')
             py.show()
+
+    def slr(self, objname, overwrite=False):
+
+        if 'slr-config' not in self.config:
+            raise IOError('Required information not found. Define SLR configuration.')
+
+        for slr_group in self.config['slr-config']:
+            # print slr_group
+            for id in slr_group:
+                log.debug('SLR process %s: %s' % (slr_group[id],
+                                                  self.config['objects'][objname][slr_group[id]]['coadd']))
+
+        # img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
+        #                                 overwrite=overwrite,
+        #                                 getobject=[objname])
+        #
+        # sex = SExtractor()
+        # # default params
+        # with open(self.config['master-photometry-sex-config'], 'r') as fp:
+        #     sex_config = yaml.load(fp)
+        # for key in sex_config.keys():
+        #     sex.config[key] = sex_config[key]
+        #
+        # sex.config['CONFIG_FILE'] = self.config['sex-config']
+        #
+        # for img in img_list:
+        #     log.debug('Performing photometry in %s' % img[0])
+        #     # copyfile(rpath[0],wpath[0])
+        #     # log.debug('Processing %s...' % ref_img[0])
+        #     # sex.config['CATALOG_NAME'] = img[0].replace('.fits', '.cat')
+        #     # sex.config['CHECKIMAGE_TYPE'] = 'APERTURES,SEGMENTATION'
+        #     # sex.config['CHECKIMAGE_NAME'] = '%s,%s' % (img[0].replace('.fits', '.apert.fits'),
+        #     #                                            img[0].replace('.fits', '.segm.fits'))
+        #     sex.run(img[0], updateconfig=False, clean=False,
+        #             path=self.config['sex-path'])
+        #     if os.path.exists(self.config['sex-catalog-name']):
+        #         move(self.config['sex-catalog-name'],
+        #              img[0].replace('.fits', '.cat'))
+        #         move('test.aper.fits',
+        #              img[0].replace('.fits', '.aper.fits'))
+        #         move('test.segm.fits',
+        #              img[0].replace('.fits', '.segm.fits'))
+        #         move('test.backg.fits',
+        #              img[0].replace('.fits', '.backg.fits'))
