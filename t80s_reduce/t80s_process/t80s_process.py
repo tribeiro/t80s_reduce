@@ -1012,6 +1012,7 @@ class T80SProcess:
 
                     swarp_coadd.config['CENTER'] = '%s, %s' % (ref_hdr["RA"],
                                                                ref_hdr["DEC"])
+                    swarp_coadd.config['CENTER_TYPE'] = 'MANUAL'
                     if 'coadd-weight-map' in self.config and os.path.exists(self.config['coadd-weight-map']):
                         swarp_coadd.config['WEIGHT_IMAGE'] = self.config['coadd-weight-map']
                         swarp_coadd.config['WEIGHT_TYPE'] = 'MAP_WEIGHT'
@@ -1043,6 +1044,9 @@ class T80SProcess:
         object_list = self.config['objects']
         photometry_detect_filters = self.config[
             'photometry-detect-filters'] if 'photometry-detection-filters' in self.config else ['R']
+
+        sex = SExtractor()
+        sex.config['CONFIG_FILE'] = self.config['sex-config']
 
         for obj in object_list:
             phot_files = []
@@ -1088,27 +1092,25 @@ class T80SProcess:
             else:
                 detect_img = detect_files[0]
 
-            sex = SExtractor()
-
-            # default params
-            with open(self.config['master-photometry-sex-config'], 'r') as fp:
-                sex_config = yaml.load(fp)
-            for key in sex_config.keys():
-                sex.config[key] = sex_config[key]
-            # sex.config['CONFIG_FILE'] = self.config['master-photometry-sex-config']
 
             # ok, here we go!
             log.info('Running sextractor')
             # copyfile(rpath[0],wpath[0])
             # log.debug('Processing %s...' % ref_img[0])
             for img in phot_files:
-                sex.config['CATALOG_NAME'] = img.replace('.fits', '.cat')
-                sex.config['CHECKIMAGE_TYPE'] = 'APERTURES,SEGMENTATION'
-                sex.config['CHECKIMAGE_NAME'] = '%s,%s' % (img.replace('.fits', '.apert.fits'),
-                                                           img.replace('.fits', '.segm.fits'))
                 sex.run('%s,%s' % (detect_img,
-                                   img), clean=False,
-                        path=self.config['sex-path'])
+                                   img), updateconfig=False, clean=False,
+                    path=self.config['sex-path'])
+
+                if os.path.exists(self.config['sex-catalog-name']):
+                    move(self.config['sex-catalog-name'],
+                         os.path.join(wpath,img.replace('.fits', '.cat')))
+                    move('test.aper.fits',
+                         os.path.join(wpath,img.replace('.fits', '.aper.fits')))
+                    move('test.segm.fits',
+                         os.path.join(wpath,img.replace('.fits', '.segm.fits')))
+                    move('test.backg.fits',
+                         os.path.join(wpath,img.replace('.fits', '.backg.fits')))
 
     def single_photometry(self, objname, overwrite=False):
 
@@ -1320,8 +1322,24 @@ class T80SProcess:
         for slr_group in self.config['slr-config']:
             # print slr_group
             for id in slr_group:
+                rpath = os.path.join(self.config['path'],
+                                     self.config['objects'][objname]['night'],
+                                     objname.replace(' ', '_'),
+                                     slr_group[id]) if 'wpath' not in self.config else os.path.join(
+                    self.config['wpath'],
+                    self.config['objects'][
+                        objname]['night'],
+                    objname.replace(' ', '_'),
+                    slr_group[id])
+
+                catalog = os.path.join(rpath, self.config['objects'][objname][slr_group[id]]['coadd'] + '.cat')
+                if not os.path.exists(catalog):
+                    raise IOError('Could not find catalog file %s for %s in %s. Try running master-photometry '
+                                  'before SLR.' % (catalog, objname, slr_group[id]))
+
                 log.debug('SLR process %s: %s' % (slr_group[id],
                                                   self.config['objects'][objname][slr_group[id]]['coadd']))
+
 
         # img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
         #                                 overwrite=overwrite,
