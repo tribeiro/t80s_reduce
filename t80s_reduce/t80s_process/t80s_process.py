@@ -543,6 +543,7 @@ class T80SProcess:
                 # if there is a segmentation map, use it as a mask
                 mask = None
                 if os.path.exists(img[0].replace('.fits','.segm.fits')):
+                    log.debug('Found segmentation map. Using as source mask...')
                     mask = fits.getdata(img[0].replace('.fits','.segm.fits')) != 0
                 backgrdcorr.subtract_background_section(show=True, filter_shape=(7,7), mask=mask)
                 log.debug('Writing %s' % img[1])
