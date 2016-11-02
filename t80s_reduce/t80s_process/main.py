@@ -37,7 +37,7 @@ This script will do:
                         help='Perform one of the processing options.',
                         choices=['master-bias', 'biascorr', 'overcorr', 'trim', 'linearize', 'norm-flat',
                                  'norm-flat-channel', 'master-flat', 'flatcorr', 'adu2e', 'naive-combine', 'register',
-                                 'astrometry', 'astrometry-align', 'coadd', 'master-photometry', 'single-photometry',
+                                 'astrometry', 'astrometry-align', 'background', 'coadd', 'master-photometry', 'single-photometry',
                                  'prep-extinction','extinction', 'slr'])
     parser.add_argument('--object',
                         help='Choose one object from database to process (works only with single-photometry, for now).',
@@ -106,6 +106,9 @@ This script will do:
     elif args.action == 'astrometry-align':
         log.debug('Astrometric calibration.')
         process.astrometry_align(overwrite=args.overwrite)
+    elif args.action == 'background':
+        log.debug('Background subtraction.')
+        process.background_subtraction(overwrite=args.overwrite)
     elif args.action == 'coadd':
         log.debug('Coadding images.')
         process.coadd(overwrite=args.overwrite)
