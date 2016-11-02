@@ -545,7 +545,9 @@ class T80SProcess:
                 if os.path.exists(img[0].replace('.fits','.segm.fits')):
                     log.debug('Found segmentation map. Using as source mask...')
                     mask = fits.getdata(img[0].replace('.fits','.segm.fits')) != 0
-                backgrdcorr.subtract_background_section(show=True, filter_shape=(7,7), mask=mask)
+                # Todo: Read configuration from config file
+                backgrdcorr.subtract_background_section(show=True, box_shape = (128,128),
+                                                        filter_shape=(7,7), mask=mask)
                 log.debug('Writing %s' % img[1])
                 backgrdcorr.ccd.write(img[1])
 
