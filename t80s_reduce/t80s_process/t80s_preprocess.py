@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 from fits_reduce.util.overscancorr import OverscanCorr
+from photutils import Background
 
 import time
 
@@ -120,3 +121,37 @@ class T80SPreProc(OverscanCorr):
 
         self.ccd.data = newdata
 
+    def subtract_background_section(self, box_shape=(64,64), filter_shape=(3,3), mask=None, show=False):
+        '''
+
+        :return:
+        '''
+
+        backgrd_img = np.zeros_like(self.ccd.data,dtype=np.float)
+
+        for i,subarr in enumerate(self._ccdsections):
+            self.log.debug('Estimating background for section %i' % (i+1))
+            # print scan_level
+            if mask is not None:
+                mmask = mask[subarr.section]
+            else:
+                mmask = mask
+            backgrd_img[subarr.section] = Background(self.ccd.data[subarr.section],
+                                                     box_shape,
+                                                     filter_shape=filter_shape,
+                                                     mask=mmask).background
+        if show:
+            import pyds9 as ds9
+
+            d = ds9.ds9()
+            d.set_np2arr(backgrd_img)
+
+        newdata = np.zeros_like(self.ccd.data,dtype=np.float) + self.ccd.data
+        newdata -= backgrd_img
+        self.ccd.data = newdata
+
+    def show(self):
+        import pyds9 as ds9
+
+        d = ds9.ds9()
+        d.set_np2arr(self.ccd.data)

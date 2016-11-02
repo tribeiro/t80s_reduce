@@ -513,6 +513,47 @@ class T80SProcess:
             else:
                 self.config['objects'][img[2][1]][img[2][2]]['flatcorr'].append(os.path.basename(img[1]))
 
+    def background_subtraction(self, overwrite=False):
+        '''
+
+        :param overwrite:
+        :return:
+        '''
+        # Building file list
+        img_list = self.get_target_list(get_file_type='astrometry', write_file_type='backgrd', overwrite=overwrite)
+
+        # Todo: Paralellize this!
+        for i, img in enumerate(img_list):
+            try:
+                backgrdcorr = T80SPreProc()
+                log.info('Reading in %s' % img[0])
+                backgrdcorr.read('%s' % img[0])
+
+                log.info('Loading configuration from %s' % self.config['trimmed_overscan_config'])
+                backgrdcorr.loadConfiguration(self.config['trimmed_overscan_config'])
+
+                if not os.path.exists(os.path.dirname(img[1])):
+                    log.debug('Creating parent directory %s' % os.path.dirname(img[1]))
+                    os.mkdir(os.path.dirname(img[1]))
+                elif os.path.exists(img[1]) and overwrite:
+                    log.debug('Removing existing file %s' % img[1])
+                    os.remove(img[1])
+
+                # if there is a segmentation map, use it as a mask
+                mask = None
+                if os.path.exists(img[0].replace('.fits','.segm.fits')):
+                    mask = fits.getdata(img[0].replace('.fits','.segm.fits')) != 0
+                backgrdcorr.subtract_background_section(show=True, filter_shape=(7,7), mask=mask)
+                log.debug('Writing %s' % img[1])
+                backgrdcorr.ccd.write(img[1])
+
+            except Exception, e:
+                log.exception(e)
+                continue
+            else:
+                self.config['objects'][img[2][1]][img[2][2]]['backgrd'].append(os.path.basename(img[1]))
+
+
     def naive_combine(self, image_type='flatcorr', overwrite=False):
         '''
         Combine all images of the objects in a single filter using a naive approach, whitout fixing astrometric
@@ -981,13 +1022,15 @@ class T80SProcess:
     def coadd(self, overwrite=False):
 
         for obj in self.config['objects']:
-            ref_img = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
+            get_type = 'backgrd' if 'backgrd' in self.config['objects'][obj] else 'astrometry'
+
+            ref_img = self.get_target_list(get_file_type=get_type, write_file_type='coadd',
                                            overwrite=overwrite,
                                            getobject=[obj],
                                            getfilter='R')[0]
             ref_hdr = fits.getheader(ref_img[0])
             for fltr in FILTERS:
-                img_list = self.get_target_list(get_file_type='astrometry', write_file_type='coadd',
+                img_list = self.get_target_list(get_file_type=get_type, write_file_type='coadd',
                                                 overwrite=overwrite,
                                                 getobject=[obj],
                                                 getfilter=[fltr])
@@ -1016,7 +1059,7 @@ class T80SProcess:
                     if 'coadd-weight-map' in self.config and os.path.exists(self.config['coadd-weight-map']):
                         swarp_coadd.config['WEIGHT_IMAGE'] = self.config['coadd-weight-map']
                         swarp_coadd.config['WEIGHT_TYPE'] = 'MAP_WEIGHT'
-                        swarp_coadd.config['BLANK_BADPIXELS'] = 'Y'
+                        swarp_coadd.config['BLANK_BADPIXELS'] = 'N'
                     swarp_coadd.config['IMAGE_SIZE'] = 10000
                     swarp_coadd.config['IMAGEOUT_NAME'] = os.path.join(wpath, coadd_img + '.swarp.fits')
                     swarp_coadd.config['WEIGHTOUT_NAME'] = os.path.join(wpath, coadd_img + '.weight.fits')
@@ -1319,9 +1362,16 @@ class T80SProcess:
         if 'slr-config' not in self.config:
             raise IOError('Required information not found. Define SLR configuration.')
 
+        import pylab as py
+
         for slr_group in self.config['slr-config']:
             # print slr_group
+            group_data = {}
+            mask=None
             for id in slr_group:
+                if slr_group[id] in group_data:
+                    continue
+
                 rpath = os.path.join(self.config['path'],
                                      self.config['objects'][objname]['night'],
                                      objname.replace(' ', '_'),
@@ -1339,7 +1389,30 @@ class T80SProcess:
 
                 log.debug('SLR process %s: %s' % (slr_group[id],
                                                   self.config['objects'][objname][slr_group[id]]['coadd']))
+                group_data[slr_group[id]] = ascii.read(catalog)
 
+                if mask is None:
+                    mask = np.bitwise_and(np.bitwise_and(group_data[slr_group[id]]['FLAGS'] != 0,
+                                                         group_data[slr_group[id]]['MAG_AUTO'] < 99.),
+                                          group_data[slr_group[id]]['MAG_AUTO'] / group_data[slr_group[id]][
+                                              'MAGERR_AUTO'] > 50.)
+                else:
+                    mask = np.bitwise_and(np.bitwise_and(mask,
+                                          np.bitwise_and(group_data[slr_group[id]]['FLAGS'] != 0,
+                                          group_data[slr_group[id]]['MAG_AUTO'] < 99.)),
+                                          group_data[slr_group[id]]['MAG_AUTO'] / group_data[slr_group[id]][
+                                              'MAGERR_AUTO'] > 50.)
+
+            py.xlabel('%s - %s' % (slr_group[3],slr_group[4]))
+            py.ylabel('%s - %s' % (slr_group[1],slr_group[2]))
+            py.errorbar(x=group_data[slr_group[3]]['MAG_AUTO'][mask] - group_data[slr_group[4]]['MAG_AUTO'][mask],
+                        y=group_data[slr_group[1]]['MAG_AUTO'][mask] - group_data[slr_group[2]]['MAG_AUTO'][mask],
+                        xerr=group_data[slr_group[3]]['MAGERR_AUTO'][mask] + group_data[slr_group[4]]['MAGERR_AUTO'][
+                            mask],
+                        yerr=group_data[slr_group[1]]['MAGERR_AUTO'][mask] + group_data[slr_group[2]]['MAGERR_AUTO'][
+                            mask],
+                        fmt='.')
+            py.show()
 
         # img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
         #                                 overwrite=overwrite,
