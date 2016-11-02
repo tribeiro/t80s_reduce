@@ -1023,7 +1023,7 @@ class T80SProcess:
     def coadd(self, overwrite=False):
 
         for obj in self.config['objects']:
-            get_type = 'backgrd' if 'backgrd' in self.config['objects'][obj] else 'astrometry'
+            get_type = 'backgrd' if 'backgrd' in self.config['objects'][obj]['R'] else 'astrometry'
             log.debug('Working on %s images' % get_type)
             ref_img = self.get_target_list(get_file_type=get_type, write_file_type='coadd',
                                            overwrite=overwrite,
