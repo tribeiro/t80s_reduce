@@ -8,6 +8,7 @@ from astropy.io import fits, ascii
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import FK5
+from padova.isocdata import IsochroneSet
 
 import datetime
 from distutils.dir_util import mkpath
@@ -1023,7 +1024,7 @@ class T80SProcess:
 
         for obj in self.config['objects']:
             get_type = 'backgrd' if 'backgrd' in self.config['objects'][obj] else 'astrometry'
-
+            log.debug('Working on %s images' % get_type)
             ref_img = self.get_target_list(get_file_type=get_type, write_file_type='coadd',
                                            overwrite=overwrite,
                                            getobject=[obj],
@@ -1392,26 +1393,42 @@ class T80SProcess:
                 group_data[slr_group[id]] = ascii.read(catalog)
 
                 if mask is None:
-                    mask = np.bitwise_and(np.bitwise_and(group_data[slr_group[id]]['FLAGS'] != 0,
+                    mask = np.bitwise_and(np.bitwise_and(np.bitwise_and(group_data[slr_group[id]]['FLAGS'] != 0,
                                                          group_data[slr_group[id]]['MAG_AUTO'] < 99.),
                                           group_data[slr_group[id]]['MAG_AUTO'] / group_data[slr_group[id]][
-                                              'MAGERR_AUTO'] > 50.)
+                                              'MAGERR_AUTO'] > 100.),
+                                          group_data[slr_group[id]]['CLASS_STAR'] < 0.25)
                 else:
-                    mask = np.bitwise_and(np.bitwise_and(mask,
+                    mask = np.bitwise_and(np.bitwise_and(np.bitwise_and(mask,
                                           np.bitwise_and(group_data[slr_group[id]]['FLAGS'] != 0,
                                           group_data[slr_group[id]]['MAG_AUTO'] < 99.)),
                                           group_data[slr_group[id]]['MAG_AUTO'] / group_data[slr_group[id]][
-                                              'MAGERR_AUTO'] > 50.)
+                                              'MAGERR_AUTO'] > 100.),
+                                          group_data[slr_group[id]]['CLASS_STAR'] < 0.25)
 
             py.xlabel('%s - %s' % (slr_group[3],slr_group[4]))
             py.ylabel('%s - %s' % (slr_group[1],slr_group[2]))
+
             py.errorbar(x=group_data[slr_group[3]]['MAG_AUTO'][mask] - group_data[slr_group[4]]['MAG_AUTO'][mask],
                         y=group_data[slr_group[1]]['MAG_AUTO'][mask] - group_data[slr_group[2]]['MAG_AUTO'][mask],
                         xerr=group_data[slr_group[3]]['MAGERR_AUTO'][mask] + group_data[slr_group[4]]['MAGERR_AUTO'][
                             mask],
                         yerr=group_data[slr_group[1]]['MAGERR_AUTO'][mask] + group_data[slr_group[2]]['MAGERR_AUTO'][
                             mask],
-                        fmt='.')
+                        fmt='ro',
+                        capsize=0,
+                        ecolor='0.85',
+                        alpha=0.5)
+            if 'isochrones' in self.config:
+                with open(self.config['isochrones']['file']) as fp:
+                    iso = IsochroneSet(fp)
+                py.plot(iso.isochrones[0][self.config['isochrones']['filter-translation'][slr_group[3]]] -
+                        iso.isochrones[0][self.config['isochrones']['filter-translation'][slr_group[4]]],
+                        iso.isochrones[0][self.config['isochrones']['filter-translation'][slr_group[1]]] -
+                        iso.isochrones[0][self.config['isochrones']['filter-translation'][slr_group[2]]],
+                        'k-',
+                        lw=2)
+
             py.show()
 
         # img_list = self.get_target_list(get_file_type='astrometry', write_file_type=None,
