@@ -545,9 +545,17 @@ class T80SProcess:
                 if os.path.exists(img[0].replace('.fits','.segm.fits')):
                     log.debug('Found segmentation map. Using as source mask...')
                     mask = fits.getdata(img[0].replace('.fits','.segm.fits')) != 0
-                # Todo: Read configuration from config file
-                backgrdcorr.subtract_background_section(show=True, box_shape = (128,128),
-                                                        filter_shape=(7,7), mask=mask)
+                box_shape = (56,56)
+                filter_shape = (7,7)
+                if 'box_shape' in self.config['background']:
+                    box_shape = (self.config['background']['box_shape'][0],
+                                 self.config['background']['box_shape'][1])
+                if 'filter_shape' in self.config['background']:
+                    filter_shape = (self.config['background']['filter_shape'][0],
+                                    self.config['background']['filter_shape'][1])
+
+                backgrdcorr.subtract_background_section(show=True, box_shape = box_shape,
+                                                        filter_shape=filter_shape, mask=mask)
                 log.debug('Writing %s' % img[1])
                 backgrdcorr.ccd.write(img[1])
 
@@ -1269,8 +1277,8 @@ class T80SProcess:
                                                                 os.path.basename(img[0])))
 
                     sex_table = ascii.read(sexcat_name)
-                    sex_catalog = SkyCoord(ra=sex_table['ALPHA_J2000'],
-                                           dec=sex_table['DELTA_J2000'])
+                    sex_catalog = SkyCoord(ra=sex_table['ALPHA_J2000']*u.deg,
+                                           dec=sex_table['DELTA_J2000']*u.deg)
 
                     hdr = fits.getheader(img[0])
                     for isrc, source in enumerate(self.config['objects'][ext_object]['plus-spec']['catalog']):
@@ -1307,6 +1315,9 @@ class T80SProcess:
         # Determine which targets belongs to extintion monitor
         object_list = []
         cat = []
+
+        if 'extinction' not in self.config:
+            self.config['extinction'] = {}
 
         for ext_object in self.config['objects']:
             if self.config['objects'][ext_object]['type'] == obs_type:
@@ -1351,15 +1362,18 @@ class T80SProcess:
             sol = np.polyfit(ext_cat['secz'],
                              ext_cat['mag'],
                              1)
-            py.title(flt)
-            xx = np.linspace(1.0,2.5)
-            py.plot(ext_cat['secz'],
-                    ext_cat['mag'],
-                    'o')
-            py.plot(xx,
-                    np.polyval(sol,xx),
-                    '-')
-            py.show()
+            log.info('%4s Zero Point: %.4f / Ext. coef: %.4f' % (flt, sol[1], sol[0]))
+            self.config['extinction'][flt] = {'m0' : float(sol[1]),
+                                              'x' : float(sol[0])}
+            # py.title(flt)
+            # xx = np.linspace(1.0,2.5)
+            # py.plot(ext_cat['secz'],
+            #         ext_cat['mag'],
+            #         'o')
+            # py.plot(xx,
+            #         np.polyval(sol,xx),
+            #         '-')
+            # py.show()
 
     def slr(self, objname, overwrite=False):
 
@@ -1412,8 +1426,16 @@ class T80SProcess:
             py.xlabel('%s - %s' % (slr_group[3],slr_group[4]))
             py.ylabel('%s - %s' % (slr_group[1],slr_group[2]))
 
-            py.errorbar(x=group_data[slr_group[3]]['MAG_AUTO'][mask] - group_data[slr_group[4]]['MAG_AUTO'][mask],
-                        y=group_data[slr_group[1]]['MAG_AUTO'][mask] - group_data[slr_group[2]]['MAG_AUTO'][mask],
+            c0 = 0.
+            c1 = 0.
+            if 'extinction' in self.config:
+                c1 = self.config['extinction'][slr_group[1]]['m0']
+                c2 = self.config['extinction'][slr_group[2]]['m0']
+                c3 = self.config['extinction'][slr_group[3]]['m0']
+                c4 = self.config['extinction'][slr_group[4]]['m0']
+
+            py.errorbar(x=group_data[slr_group[3]]['MAG_AUTO'][mask]-c3 - group_data[slr_group[4]]['MAG_AUTO'][mask] +c4 ,
+                        y=group_data[slr_group[1]]['MAG_AUTO'][mask] -c1 - group_data[slr_group[2]]['MAG_AUTO'][mask] + c2,
                         xerr=group_data[slr_group[3]]['MAGERR_AUTO'][mask] + group_data[slr_group[4]]['MAGERR_AUTO'][
                             mask],
                         yerr=group_data[slr_group[1]]['MAGERR_AUTO'][mask] + group_data[slr_group[2]]['MAGERR_AUTO'][
