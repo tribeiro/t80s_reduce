@@ -716,7 +716,7 @@ class T80SProcess:
             self.config['objects'][obj]['astrometry-reference-filter']
             try:
                 ref_img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
-                                               overwrite=False,
+                                               overwrite=True,
                                                getobject=[obj],
                                                getfilter=ref_filter)
                 ref_img = ref_img_list[ref_index]
@@ -726,7 +726,8 @@ class T80SProcess:
                 for img in ref_img_list:
                     log.debug('%s' % img[0])
                 raise
-                
+
+
             img1 = fits.getdata(ref_img[0])
             log.debug('Aligning images with reference')
             ix, iy = img1.shape
