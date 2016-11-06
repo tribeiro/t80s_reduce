@@ -714,11 +714,19 @@ class T80SProcess:
             self.config['objects'][obj]['astrometry-reference-index']
             ref_filter = 'R' if 'astrometry-reference-filter' not in self.config['objects'][obj] else \
             self.config['objects'][obj]['astrometry-reference-filter']
-            ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
-                                           overwrite=False,
-                                           getobject=[obj],
-                                           getfilter=ref_filter)[ref_index]
-
+            try:
+                ref_img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
+                                               overwrite=False,
+                                               getobject=[obj],
+                                               getfilter=ref_filter)
+                ref_img = ref_img_list[ref_index]
+            except Exception, e:
+                log.error("Could not find reference image for %s in %s. Index: %i/%i" % (obj,ref_filter,
+                                                                                         ref_index,len(ref_img_list)))
+                for img in ref_img_list:
+                    log.debug('%s' % img[0])
+                raise
+                
             img1 = fits.getdata(ref_img[0])
             log.debug('Aligning images with reference')
             ix, iy = img1.shape
