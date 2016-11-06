@@ -891,11 +891,15 @@ class T80SProcess:
             img_list = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
                                             overwrite=overwrite,
                                             getobject=[obj])
+            ref_index = 0 if 'astrometry-reference-index' not in self.config['objects'][obj] else \
+            self.config['objects'][obj]['astrometry-reference-index']
+            ref_filter = 'R' if 'astrometry-reference-filter' not in self.config['objects'][obj] else \
+            self.config['objects'][obj]['astrometry-reference-filter']
 
             ref_img = self.get_target_list(get_file_type='flatcorr', write_file_type='astrometry',
                                            overwrite=overwrite,
                                            getobject=[obj],
-                                           getfilter='R')[0]
+                                           getfilter=ref_filter)[ref_index]
 
             ref_wcs_name = ref_img[1].replace('.fits', '_axy-out.wcs')
             # Check that reference image wcs information exists
