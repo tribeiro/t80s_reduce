@@ -8,6 +8,7 @@ from astropy.io import fits, ascii
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import FK5
+from astropy.coordinates import Angle
 from padova.isocdata import IsochroneSet
 
 import datetime
@@ -1310,7 +1311,16 @@ class T80SProcess:
                         idx, d2d, d3d = coord.match_to_catalog_sky(sex_catalog) # Todo: Threshold separation
                         field_cat['inst_spec'][source['id']][tflt]['mag'].append(float(sex_table['MAG_AUTO'][idx]))
                         field_cat['inst_spec'][source['id']][tflt]['sigma'].append(float(sex_table['MAGERR_AUTO'][idx]))
-                        field_cat['inst_spec'][source['id']][tflt]['secz'].append(float(hdr['AIRMASS']))
+                        if 'AIRMASS' in hdr:
+                            field_cat['inst_spec'][source['id']][tflt]['secz'].append(float(hdr['AIRMASS']))
+                        elif 'ALT' in hdr:
+                            altitude = Angle(float(hdr['ALT']),unit=u.degree)
+                            secz = 1./np.cos(np.pi/2.-altitude*np.pi/180.)
+                            if am < 0.:
+                                am = 999.
+                            field_cat['inst_spec'][source['id']][tflt]['secz'].append(secz)
+                        else:
+                            raise KeyError("Could not find AIRMASS or ALT in image header.")
                         #
                         log.debug(
                             'Source %i @ (ra,dec): %s, %s (dist. %.2f )Mag. %s: (catalog/observed) '
