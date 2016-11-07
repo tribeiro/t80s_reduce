@@ -1318,7 +1318,7 @@ class T80SProcess:
                             secz = 1./np.cos(np.pi/2.-altitude.value*np.pi/180.)
                             if secz < 0.:
                                 secz = 999.
-                            field_cat['inst_spec'][source['id']][tflt]['secz'].append(secz)
+                            field_cat['inst_spec'][source['id']][tflt]['secz'].append(float(secz))
                         else:
                             raise KeyError("Could not find AIRMASS or ALT in image header.")
                         #
