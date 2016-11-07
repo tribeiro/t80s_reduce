@@ -1299,8 +1299,8 @@ class T80SProcess:
                                                                 os.path.basename(img[0])))
 
                     sex_table = ascii.read(sexcat_name)
-                    sex_catalog = SkyCoord(ra=sex_table['ALPHA_J2000']*u.deg,
-                                           dec=sex_table['DELTA_J2000']*u.deg)
+                    sex_catalog = SkyCoord(ra=sex_table['ALPHA_J2000'],
+                                           dec=sex_table['DELTA_J2000'])
 
                     hdr = fits.getheader(img[0])
                     for isrc, source in enumerate(self.config['objects'][ext_object]['plus-spec']['catalog']):
