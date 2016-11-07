@@ -1314,8 +1314,8 @@ class T80SProcess:
                         if 'AIRMASS' in hdr:
                             field_cat['inst_spec'][source['id']][tflt]['secz'].append(float(hdr['AIRMASS']))
                         elif 'ALT' in hdr:
-                            altitude = Angle(float(hdr['ALT']),unit=u.degree)
-                            secz = 1./np.cos(np.pi/2.-altitude*np.pi/180.)
+                            altitude = Angle(hdr['ALT'],unit=u.degree)
+                            secz = 1./np.cos(np.pi/2.-altitude.value*np.pi/180.)
                             if am < 0.:
                                 am = 999.
                             field_cat['inst_spec'][source['id']][tflt]['secz'].append(secz)
