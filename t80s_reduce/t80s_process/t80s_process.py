@@ -177,6 +177,7 @@ class T80SProcess:
                 elif write_file_type is not None:
                     config['objects'][object][filter][write_file_type] = []
 
+                print object, filter, get_file_type
                 for raw in config['objects'][object][filter][get_file_type]:
                     rfile = os.path.join(rpath, get_file_type.replace(' ', '_'), raw)
                     wfile = os.path.join(wpath, write_file_type.replace(' ', '_'), raw) if write_file_type is not None \
