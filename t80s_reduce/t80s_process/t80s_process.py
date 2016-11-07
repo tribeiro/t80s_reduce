@@ -174,7 +174,7 @@ class T80SProcess:
                             log.debug('Image %s processed, skipping.' % raw)
                             # 'Skipping.' % (object, filter))
                     continue
-                else:
+                elif write_file_type is not None:
                     config['objects'][object][filter][write_file_type] = []
 
                 for raw in config['objects'][object][filter][get_file_type]:
