@@ -1316,8 +1316,8 @@ class T80SProcess:
                         elif 'ALT' in hdr:
                             altitude = Angle(hdr['ALT'],unit=u.degree)
                             secz = 1./np.cos(np.pi/2.-altitude.value*np.pi/180.)
-                            if am < 0.:
-                                am = 999.
+                            if secz < 0.:
+                                secz = 999.
                             field_cat['inst_spec'][source['id']][tflt]['secz'].append(secz)
                         else:
                             raise KeyError("Could not find AIRMASS or ALT in image header.")
